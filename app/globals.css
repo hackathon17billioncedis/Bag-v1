@@ -196,6 +196,32 @@ select {
   gap: 0.5rem;
 }
 
+.hero-visual {
+  position: relative;
+  min-height: 220px;
+  border-radius: 1.4rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+.hero-visual img {
+  object-fit: cover;
+}
+
+.hero-visual-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 1rem;
+  display: grid;
+  gap: 0.25rem;
+  background: linear-gradient(180deg, transparent, rgba(4, 8, 18, 0.84));
+}
+
+.hero-visual-overlay strong {
+  font-size: 1rem;
+}
+
 .hero-card h2,
 .section-title {
   margin: 0;

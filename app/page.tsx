@@ -708,6 +708,14 @@ export default function HomePage() {
               <p>Guests stay on Llama 3.1 8B. Sign in to unlock the rest of the model roster and image generation.</p>
             </div>
 
+            <div className="hero-visual">
+              <Image src="/Bag-v1-UI.png" alt="Bag-v1 interface preview" fill priority sizes="(max-width: 1100px) 100vw, 28vw" />
+              <div className="hero-visual-overlay">
+                <span className="eyebrow">Bag-v1 UI</span>
+                <strong>Polished, compact, and export-ready.</strong>
+              </div>
+            </div>
+
             <div className="chip-row">
               <span className="chip-static">OpenRouter</span>
               <span className="chip-static">Google sign-in</span>
