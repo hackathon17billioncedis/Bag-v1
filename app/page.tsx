@@ -652,7 +652,6 @@ export default function HomePage() {
             </div>
             <div className="brand-copy">
               <h1>BAG-V1</h1>
-              <p>AI workspace for Vercel.</p>
             </div>
           </div>
           <div className="toolbar-right">
@@ -691,9 +690,7 @@ export default function HomePage() {
 
         <section className="layout">
           <aside className="panel panel-hero">
-            <div className="hero-visual">
-              <Image src="/Bag-v1-UI.png" alt="Bag-v1 interface preview" fill priority sizes="(max-width: 1100px) 100vw, 28vw" />
-            </div>
+            <div className="hero-visual" aria-hidden="true" />
           </aside>
 
           <div className="workspace-stack">
