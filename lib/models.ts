@@ -6,7 +6,10 @@ export type ModelOption = {
 }
 
 export const APP_NAME = 'Bag-v1'
-export const DEFAULT_MODEL = process.env.OPENROUTER_MODEL ?? 'google/gemma-3-4b-it:free'
+export const DEFAULT_MODEL =
+  process.env.OPENROUTER_DEFAULT_MODEL ??
+  process.env.OPENROUTER_MODEL ??
+  'google/gemma-3-4b-it:free'
 export const IMAGE_MODEL = process.env.OPENROUTER_IMAGE_MODEL ?? 'black-forest-labs/flux.2-klein-4b'
 
 export const SYSTEM_PROMPT = `You are ${APP_NAME}, a warm, helpful AI assistant.
@@ -130,6 +133,21 @@ export const MODEL_OPTIONS: ModelOption[] = [
     bestFor: 'Maximum capability',
   },
 ]
+
+export function getModelOptions() {
+  const envModels = process.env.OPENROUTER_MODELS
+    ?.split(',')
+    .map((model) => model.trim())
+    .filter(Boolean)
+
+  if (!envModels?.length) {
+    return MODEL_OPTIONS
+  }
+
+  const defaultsById = new Map(MODEL_OPTIONS.map((model) => [model.id, model]))
+
+  return envModels.map((modelId) => defaultsById.get(modelId) ?? getModelOption(modelId))
+}
 
 export function getModelOption(modelId: string) {
   return MODEL_OPTIONS.find((model) => model.id === modelId) ?? {

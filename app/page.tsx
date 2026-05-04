@@ -16,7 +16,7 @@ import {
 import { UserButton, useUser } from '@clerk/nextjs'
 import Link from 'next/link'
 import type { Route } from 'next'
-import { APP_NAME, DEFAULT_MODEL, MODEL_OPTIONS, getModelOption } from '@/lib/models'
+import { APP_NAME, DEFAULT_MODEL, getModelOption, getModelOptions } from '@/lib/models'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -39,10 +39,10 @@ type WindowWithSpeech = Window & {
 }
 
 const QUICK_PROMPTS = [
-  'Explain this app in one paragraph.',
-  'Give me a deployment checklist for Vercel.',
-  'Write a short product summary for this assistant.',
-  'Help me debug a Next.js route handler.',
+  'Summarize this app.',
+  'Give me a Vercel launch checklist.',
+  'Help me debug a route handler.',
+  'Write a cleaner product blurb.',
 ]
 
 const STORAGE_KEY = 'bag-v1-chat-state'
@@ -75,6 +75,17 @@ export default function HomePage() {
   const recognitionRef = useRef<VoiceRecognition | null>(null)
 
   const currentModel = useMemo(() => getModelOption(model), [model])
+  const modelOptions = useMemo(() => getModelOptions(), [])
+
+  useEffect(() => {
+    if (modelOptions.length === 0) {
+      return
+    }
+
+    if (!modelOptions.some((option) => option.id === model)) {
+      setModel(modelOptions[0]?.id ?? DEFAULT_MODEL)
+    }
+  }, [model, modelOptions])
 
   useEffect(() => {
     const storedUserId = window.localStorage.getItem(USER_ID_KEY)
@@ -425,9 +436,9 @@ export default function HomePage() {
               <Sparkles />
             </div>
             <div className="brand-copy">
-              <span className="eyebrow">Vercel-ready rewrite</span>
-              <h1>Bag-v1, now on Next.js and TypeScript</h1>
-              <p>Same assistant idea, but in a stack that fits Vercel natively.</p>
+              <span className="eyebrow">Bag-v1</span>
+              <h1>Ultra-clean AI workspace for Vercel.</h1>
+              <p>Chat, switch models, use voice, and keep everything simple.</p>
             </div>
           </div>
           <div className="toolbar-right">
@@ -457,73 +468,48 @@ export default function HomePage() {
 
         <section className="layout">
           <aside className="panel panel-hero">
-            <div className="hero-card">
-              <span className="eyebrow">What changed</span>
-              <h2>Python Flask is out. Next.js App Router is in.</h2>
-              <p>
-                The backend now runs as a Vercel route handler, the UI is React + TypeScript,
-                and voice features use browser APIs instead of server-side desktop libraries.
-              </p>
+            <div className="hero-card hero-main">
+              <span className="eyebrow">Bag-v1</span>
+              <h2>Fast, polished, and built to ship.</h2>
+              <p>Pick a model, send a prompt, and keep the whole experience focused.</p>
             </div>
 
-            <ul className="feature-list">
-              <li><span className="feature-dot" /> Chat endpoint powered by OpenRouter from a Vercel-compatible API route.</li>
-              <li><span className="feature-dot" /> Browser speech recognition plus free selectable browser voices for hands-free interaction.</li>
-              <li><span className="feature-dot" /> Image generation endpoint preserved with the same OpenRouter backend.</li>
-              <li><span className="feature-dot" /> Local chat and image state persisted in browser storage.</li>
-            </ul>
+            <div className="chip-row">
+              <span className="chip-static">OpenRouter</span>
+              <span className="chip-static">Clerk Gmail</span>
+              <span className="chip-static">Browser voice</span>
+            </div>
 
-            <div className="stats">
-              <div className="stat">
-                <strong>TypeScript</strong>
-                <span>Single language across app and API</span>
+            <div className="mini-stats">
+              <div className="mini-stat">
+                <strong>{modelOptions.length}</strong>
+                <span>available models</span>
               </div>
-              <div className="stat">
-                <strong>Vercel</strong>
-                <span>Zero-config deploy path</span>
+              <div className="mini-stat">
+                <strong>{storageStatus === 'cloud' ? 'Cloud' : 'Local'}</strong>
+                <span>history mode</span>
               </div>
-              <div className="stat">
-                <strong>{MODEL_OPTIONS.length} models</strong>
-                <span>Curated defaults from the old app</span>
-              </div>
-              <div className="stat">
-                <strong>Browser voice</strong>
-                <span>No Python audio dependency</span>
-              </div>
-              <div className="stat">
-                <strong>Storage</strong>
-                <span>{storageStatus === 'cloud' ? 'Cloud history enabled' : 'Local fallback active'}</span>
+              <div className="mini-stat">
+                <strong>{voiceEnabled ? 'On' : 'Off'}</strong>
+                <span>voice output</span>
               </div>
             </div>
           </aside>
 
           <section className="panel chat-panel">
             <div className="chat-header">
-              <div className="section-title">Chat workspace</div>
-              <p className="section-subtitle">
-                Current model: <strong>{currentModel.label}</strong>
-              </p>
-              <p className="meta-row">
-                User ID: <code>{userId || 'loading...'}</code>
-                {isLoaded && user?.primaryEmailAddress?.emailAddress ? (
-                  <> | Gmail: <code>{user.primaryEmailAddress.emailAddress}</code></>
-                ) : null}
-              </p>
+              <div className="title-row">
+                <div>
+                  <div className="section-title">Chat workspace</div>
+                  <p className="section-subtitle">Current model: <strong>{currentModel.label}</strong></p>
+                </div>
+                <div className="user-chip">
+                  <span>{isLoaded && user?.primaryEmailAddress?.emailAddress ? user.primaryEmailAddress.emailAddress : 'Guest mode'}</span>
+                </div>
+              </div>
 
               <div className="toolbar">
                 <div className="toolbar-left">
-                  <select
-                    className="control"
-                    value={model}
-                    onChange={(event) => setModel(event.target.value)}
-                    aria-label="Select model"
-                  >
-                    {MODEL_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
                   <button
                     className="button button-ghost"
                     type="button"
@@ -574,14 +560,38 @@ export default function HomePage() {
               </div>
             </div>
 
+            <div className="section-heading-row">
+              <div>
+                <div className="section-title">Models</div>
+                <p className="section-subtitle">Visible roster. Tap one to switch instantly.</p>
+              </div>
+              <div className="status-pill">{modelOptions.length} models</div>
+            </div>
+
+            <section className="model-picker">
+              {modelOptions.map((option) => {
+                const active = option.id === model
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`model-card ${active ? 'active' : ''}`}
+                    onClick={() => setModel(option.id)}
+                    aria-pressed={active}
+                  >
+                    <span className="model-name">{option.label}</span>
+                    <span className="model-desc">{option.bestFor}</span>
+                    <span className="model-meta">{option.description}</span>
+                  </button>
+                )
+              })}
+            </section>
+
             <div className="messages">
               {messages.length === 0 ? (
-                <div className="hero-card">
-                  <h2>Start the conversation</h2>
-                  <p>
-                    Ask something about the migration, test the Vercel setup, or send a quick
-                    prompt from the chips below.
-                  </p>
+                <div className="empty-state">
+                  <h2>Start a conversation</h2>
+                  <p>Type a prompt or tap one of the quick starters.</p>
                 </div>
               ) : null}
 
@@ -625,7 +635,7 @@ export default function HomePage() {
                     <Play size={16} /> Stop voice
                   </button>
                 </div>
-                <p className="helper">{error || 'Type a prompt, dictate it, or let the assistant read replies aloud.'}</p>
+                <p className="helper">{error || 'Type, dictate, or use voice output.'}</p>
               </div>
 
               <div className="quick-prompts">
@@ -646,11 +656,12 @@ export default function HomePage() {
         </section>
 
         <section className="panel image-panel">
-          <div>
-            <div className="section-title">Image generation</div>
-            <p className="section-subtitle">
-              Keep the visual feature from the original app and run it from the same OpenRouter key.
-            </p>
+          <div className="section-heading-row">
+            <div>
+              <div className="section-title">Image generation</div>
+              <p className="section-subtitle">Prompt an image, then preview the result below.</p>
+            </div>
+            <div className="status-pill">OpenRouter</div>
           </div>
 
           <div className="composer-row">
@@ -681,7 +692,7 @@ export default function HomePage() {
         </section>
 
         <p className="footer-note">
-          Built as a clean Next.js + TypeScript base for Vercel. Set `OPENROUTER_API_KEY` in your environment before running the chat or image routes.
+          OpenRouter chat and image generation run from the same Vercel app. Set `OPENROUTER_API_KEY` before you use either route.
         </p>
       </div>
     </main>
