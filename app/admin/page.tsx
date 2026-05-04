@@ -97,9 +97,9 @@ export default function AdminPage() {
               <Shield />
             </div>
             <div className="brand-copy">
-              <span className="eyebrow">Admin dashboard</span>
-              <h1>Bag-v1 control center</h1>
-              <p>Track usage, model mix, and user activity from the storage layer.</p>
+              <span className="eyebrow">Portal</span>
+              <h1>Bag-v1 admin dashboard</h1>
+              <p>Monitor usage, model mix, and recent activity from one dedicated portal.</p>
             </div>
           </div>
           <div className="toolbar-right">
@@ -122,6 +122,14 @@ export default function AdminPage() {
           </div>
         </header>
 
+        <section className="panel hero-card">
+          <span className="eyebrow">Admin access</span>
+          <h2>Open the Bag-v1 portal with the allowlisted Google account.</h2>
+          <p className="helper">
+            This dashboard stays separate from the assistant workspace. Sign in with the admin Gmail account to load the portal.
+          </p>
+        </section>
+
         <section className="panel image-panel">
           <form className="admin-login" onSubmit={handleSubmit}>
             <div>
@@ -141,14 +149,14 @@ export default function AdminPage() {
                   setSessionUser(signedInUser)
                     await loadOverview()
                   }}
-                />
+                  />
               )}
             </div>
             <p className="meta-row">
-              Allowed admin email: <code>{process.env.ADMIN_EMAIL ?? 'not configured'}</code>
+              Current user: <code>{sessionUser?.email ?? 'signed out'}</code>
             </p>
             <p className="meta-row">
-              Current user: <code>{sessionUser?.email ?? 'signed out'}</code>
+              Portal scope: <code>usage, models, users, persistence</code>
             </p>
             {error ? <div className="error">{error}</div> : null}
           </form>
@@ -175,60 +183,62 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <section className="panel image-panel">
-              <div>
-                <div className="section-title">Model usage</div>
-                <p className="section-subtitle">How the current system is being used across models.</p>
-              </div>
-              <div className="quick-prompts">
-                {totalModels.length === 0 ? (
-                  <span className="pill">No model data yet</span>
-                ) : (
-                  totalModels.map(([modelName, count]) => (
-                    <span key={modelName} className="pill">
-                      {modelName}: {count}
-                    </span>
-                  ))
-                )}
-              </div>
-            </section>
+            <div className="layout" style={{ gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.1fr)' }}>
+              <section className="panel image-panel">
+                <div>
+                  <div className="section-title">Model usage</div>
+                  <p className="section-subtitle">How the current system is being used across models.</p>
+                </div>
+                <div className="quick-prompts">
+                  {totalModels.length === 0 ? (
+                    <span className="pill">No model data yet</span>
+                  ) : (
+                    totalModels.map(([modelName, count]) => (
+                      <span key={modelName} className="pill">
+                        {modelName}: {count}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </section>
 
-            <section className="panel image-panel">
-              <div>
-                <div className="section-title">Users</div>
-                <p className="section-subtitle">Most recent tracked users and their latest activity.</p>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>User ID</th>
-                      <th>Messages</th>
-                      <th>Last activity</th>
-                      <th>Last model</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {overview.users.length === 0 ? (
+              <section className="panel image-panel">
+                <div>
+                  <div className="section-title">Users</div>
+                  <p className="section-subtitle">Most recent tracked users and their latest activity.</p>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="admin-table">
+                    <thead>
                       <tr>
-                        <td colSpan={4}>No users yet.</td>
+                        <th>User ID</th>
+                        <th>Messages</th>
+                        <th>Last activity</th>
+                        <th>Last model</th>
                       </tr>
-                    ) : (
-                      overview.users.map((user) => (
-                        <tr key={user.userId}>
-                          <td>
-                            <code>{user.userId}</code>
-                          </td>
-                          <td>{user.messageCount}</td>
-                          <td>{user.lastActivityAt ?? 'n/a'}</td>
-                          <td>{user.lastModel ?? 'n/a'}</td>
+                    </thead>
+                    <tbody>
+                      {overview.users.length === 0 ? (
+                        <tr>
+                          <td colSpan={4}>No users yet.</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                      ) : (
+                        overview.users.map((user) => (
+                          <tr key={user.userId}>
+                            <td>
+                              <code>{user.userId}</code>
+                            </td>
+                            <td>{user.messageCount}</td>
+                            <td>{user.lastActivityAt ?? 'n/a'}</td>
+                            <td>{user.lastModel ?? 'n/a'}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
           </section>
         ) : null}
       </div>

@@ -94,12 +94,6 @@ export const MODEL_OPTIONS: ModelOption[] = [
     bestFor: 'More thoughtful replies',
   },
   {
-    id: 'google/gemma-3-4b-it',
-    label: 'Gemma 3 4B',
-    description: 'Non-free Gemma variant if available.',
-    bestFor: 'Fallback model',
-  },
-  {
     id: 'openai/gpt-oss-20b:free',
     label: 'GPT OSS 20B (Free)',
     description: 'OpenAI open-source model.',

@@ -21,6 +21,12 @@ export async function POST(request: Request) {
   }
 
   const sessionUser = await getSessionUserFromRequest(request)
+  if (!sessionUser) {
+    return NextResponse.json(
+      { error: 'Please sign in to generate images.' },
+      { status: 401 },
+    )
+  }
 
   let body: ImageRequest
   try {
@@ -30,8 +36,8 @@ export async function POST(request: Request) {
   }
 
   const prompt = body.prompt?.trim()
-  const userId = sessionUser?.id?.trim() || body.userId?.trim() || 'anonymous'
-  const userEmail = sessionUser?.email?.trim() || body.userEmail?.trim() || ''
+  const userId = sessionUser.id.trim()
+  const userEmail = sessionUser.email.trim()
   if (!prompt) {
     return NextResponse.json({ error: 'Please provide a prompt.' }, { status: 400 })
   }

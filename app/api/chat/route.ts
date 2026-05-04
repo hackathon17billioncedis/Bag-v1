@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { DEFAULT_MODEL, SYSTEM_PROMPT } from '@/lib/models'
+import { DEFAULT_MODEL, MODEL_OPTIONS, SYSTEM_PROMPT, normalizeModelId } from '@/lib/models'
 import { appendConversationEntry } from '@/lib/persistence'
 import { getSessionUserFromRequest } from '@/lib/auth'
 
@@ -14,6 +14,13 @@ type ChatRequest = {
   model?: string
   userId?: string
   userEmail?: string
+  attachments?: Array<{
+    id?: string
+    name?: string
+    type?: string
+    content?: string
+    size?: number
+  }>
 }
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -31,6 +38,40 @@ function sanitizeMessages(messages: ChatMessage[] | undefined, fallbackMessage: 
   }
 
   return cleaned
+}
+
+function buildAttachmentBlock(
+  attachments: ChatRequest['attachments'] | undefined,
+) {
+  const readable = (attachments ?? [])
+    .filter((file) => file && typeof file.content === 'string' && file.content.trim().length > 0)
+    .map((file) => ({
+      name: typeof file.name === 'string' ? file.name : 'attachment',
+      type: typeof file.type === 'string' ? file.type : 'unknown',
+      content: file.content!.trim(),
+      size: typeof file.size === 'number' ? file.size : 0,
+    }))
+
+  if (readable.length === 0) {
+    return ''
+  }
+
+  return [
+    'Attached files:',
+    ...readable.map(
+      (file, index) =>
+        `${index + 1}. ${file.name} (${file.type}, ${file.size} bytes)\n${file.content}`,
+    ),
+  ].join('\n\n')
+}
+
+function resolveModel(model: string | undefined, isSignedIn: boolean) {
+  if (!isSignedIn) {
+    return DEFAULT_MODEL
+  }
+
+  const normalized = normalizeModelId(model?.trim() || DEFAULT_MODEL)
+  return MODEL_OPTIONS.some((option) => option.id === normalized) ? normalized : DEFAULT_MODEL
 }
 
 export async function POST(request: Request) {
@@ -54,18 +95,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }
 
-  const model = body.model?.trim() || DEFAULT_MODEL
   const userId = sessionUser?.id?.trim() || body.userId?.trim() || 'anonymous'
   const userEmail = sessionUser?.email?.trim() || body.userEmail?.trim() || ''
+  const model = resolveModel(body.model, Boolean(sessionUser))
+  const attachmentsBlock = buildAttachmentBlock(body.attachments)
   const messages = sanitizeMessages(body.messages, body.message ?? '')
 
   if (messages.length === 0) {
     return NextResponse.json({ error: 'Please send a message.' }, { status: 400 })
   }
 
+  const contextualMessages = attachmentsBlock
+    ? [
+        ...messages.slice(0, -1),
+        {
+          role: 'user' as const,
+          content: `${messages.at(-1)?.content ?? ''}\n\n${attachmentsBlock}`.trim(),
+        },
+      ]
+    : messages
+
   const payload = {
     model,
-    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
+    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...contextualMessages],
     temperature: 0.7,
     max_tokens: 1200,
   }

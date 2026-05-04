@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@vercel/kv": "^3.0.0",
+    "docx": "^9.6.1",
     "jose": "^5.9.6",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.540.0",
     "next": "^15.5.2",
     "react": "^19.1.1",
