@@ -168,9 +168,16 @@ def status():
         'available_models': bagini.free_models if bagini else []
     })
 
+# Adding a WSGI callable for Vercel deployment
+try:
+    # This is needed for Vercel deployments
+    app.callable = app
+except:
+    pass
+
 if __name__ == '__main__':
     debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     print(f"🌐 Starting Bagini AI server on http://localhost:5000")
     print(f"🤖 Using model: {bagini.model if bagini else 'Unknown'}")
     print(f"🎤 Voice features: ENABLED")
-    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
+    app.run(debug=debug_mode, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
