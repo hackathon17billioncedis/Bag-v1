@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { getConversationHistory } from '@/lib/persistence'
+import { getSessionUserFromRequest } from '@/lib/auth'
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const userId = url.searchParams.get('userId')
-  const session = await auth()
+  const sessionUser = await getSessionUserFromRequest(request)
 
-  if (!userId && !session.userId) {
+  if (!userId && !sessionUser?.id) {
     return NextResponse.json({ error: 'Missing userId.' }, { status: 400 })
   }
 
-  const history = await getConversationHistory(session.userId ?? userId ?? '')
+  const history = await getConversationHistory(sessionUser?.id ?? userId ?? '')
   return NextResponse.json(history)
 }

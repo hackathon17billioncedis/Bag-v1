@@ -13,10 +13,11 @@ import {
   Sparkles,
   Volume2,
 } from 'lucide-react'
-import { UserButton, useUser } from '@clerk/nextjs'
 import Link from 'next/link'
-import type { Route } from 'next'
 import { APP_NAME, DEFAULT_MODEL, getModelOption, getModelOptions } from '@/lib/models'
+import { apiUrl } from '@/lib/client-config'
+import type { SessionUser } from '@/lib/auth'
+import { GoogleSignInButton } from '@/components/google-sign-in-button'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -51,7 +52,8 @@ const VOICE_STORAGE_KEY = 'bag-v1-voice-state'
 const USER_ID_KEY = 'bag-v1-user-id'
 
 export default function HomePage() {
-  const { user, isLoaded } = useUser()
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null)
+  const [isSessionLoading, setIsSessionLoading] = useState(true)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [model, setModel] = useState(DEFAULT_MODEL)
@@ -88,63 +90,86 @@ export default function HomePage() {
   }, [model, modelOptions])
 
   useEffect(() => {
-    const storedUserId = window.localStorage.getItem(USER_ID_KEY)
-    const clerkUserId = user?.id ?? ''
-    const resolvedUserId = clerkUserId || storedUserId || crypto.randomUUID()
-    setUserId(resolvedUserId)
-    if (!clerkUserId) {
-      window.localStorage.setItem(USER_ID_KEY, resolvedUserId)
-    }
+    let cancelled = false
 
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored) as { messages?: ChatMessage[]; model?: string }
-        if (Array.isArray(parsed.messages)) {
-          setMessages(parsed.messages)
-        }
-        if (parsed.model) {
-          setModel(parsed.model)
-        }
-      }
+    const bootstrap = async () => {
+      setIsSessionLoading(true)
 
-      const storedImage = window.localStorage.getItem(IMAGE_STORAGE_KEY)
-      if (storedImage) {
-        const parsedImage = JSON.parse(storedImage) as { prompt?: string; imageUrl?: string }
-        if (parsedImage.prompt) {
-          setImagePrompt(parsedImage.prompt)
-        }
-        if (parsedImage.imageUrl) {
-          setImageUrl(parsedImage.imageUrl)
-        }
-      }
-
-      const storedVoice = window.localStorage.getItem(VOICE_STORAGE_KEY)
-      if (storedVoice) {
-        const parsedVoice = JSON.parse(storedVoice) as {
-          voiceEnabled?: boolean
-          selectedVoice?: string
-          speechRate?: number
-        }
-        if (typeof parsedVoice.voiceEnabled === 'boolean') {
-          setVoiceEnabled(parsedVoice.voiceEnabled)
-        }
-        if (typeof parsedVoice.selectedVoice === 'string') {
-          setSelectedVoice(parsedVoice.selectedVoice)
-        }
-        if (typeof parsedVoice.speechRate === 'number') {
-          setSpeechRate(parsedVoice.speechRate)
-        }
-      }
-    } catch {
-      // Ignore storage errors and fall back to a clean session.
-    }
-
-    void (async () => {
+      let resolvedSessionUser: SessionUser | null = null
       try {
-        const response = await fetch(`/api/history?userId=${encodeURIComponent(resolvedUserId)}`)
+        const response = await fetch(apiUrl('/api/auth/me'))
+        if (response.ok) {
+          const payload = (await response.json()) as { user: SessionUser | null }
+          resolvedSessionUser = payload.user
+          if (!cancelled) {
+            setSessionUser(payload.user)
+          }
+        }
+      } catch {
+        resolvedSessionUser = null
+      }
+
+      const storedUserId = window.localStorage.getItem(USER_ID_KEY)
+      const resolvedUserId = resolvedSessionUser?.id || storedUserId || crypto.randomUUID()
+      if (!cancelled) {
+        setUserId(resolvedUserId)
+        setIsSessionLoading(false)
+      }
+
+      if (!resolvedSessionUser) {
+        window.localStorage.setItem(USER_ID_KEY, resolvedUserId)
+      }
+
+      try {
+        const stored = window.localStorage.getItem(STORAGE_KEY)
+        if (stored) {
+          const parsed = JSON.parse(stored) as { messages?: ChatMessage[]; model?: string }
+          if (Array.isArray(parsed.messages) && !cancelled) {
+            setMessages(parsed.messages)
+          }
+          if (parsed.model && !cancelled) {
+            setModel(parsed.model)
+          }
+        }
+
+        const storedImage = window.localStorage.getItem(IMAGE_STORAGE_KEY)
+        if (storedImage) {
+          const parsedImage = JSON.parse(storedImage) as { prompt?: string; imageUrl?: string }
+          if (parsedImage.prompt && !cancelled) {
+            setImagePrompt(parsedImage.prompt)
+          }
+          if (parsedImage.imageUrl && !cancelled) {
+            setImageUrl(parsedImage.imageUrl)
+          }
+        }
+
+        const storedVoice = window.localStorage.getItem(VOICE_STORAGE_KEY)
+        if (storedVoice) {
+          const parsedVoice = JSON.parse(storedVoice) as {
+            voiceEnabled?: boolean
+            selectedVoice?: string
+            speechRate?: number
+          }
+          if (typeof parsedVoice.voiceEnabled === 'boolean' && !cancelled) {
+            setVoiceEnabled(parsedVoice.voiceEnabled)
+          }
+          if (typeof parsedVoice.selectedVoice === 'string' && !cancelled) {
+            setSelectedVoice(parsedVoice.selectedVoice)
+          }
+          if (typeof parsedVoice.speechRate === 'number' && !cancelled) {
+            setSpeechRate(parsedVoice.speechRate)
+          }
+        }
+      } catch {
+        // Ignore storage errors and fall back to a clean session.
+      }
+
+      try {
+        const response = await fetch(apiUrl(`/api/history?userId=${encodeURIComponent(resolvedUserId)}`))
         if (!response.ok) {
-          setStorageStatus('local')
+          if (!cancelled) {
+            setStorageStatus('local')
+          }
           return
         }
 
@@ -153,13 +178,11 @@ export default function HomePage() {
           entries?: Array<{ role: 'user' | 'assistant'; content: string }>
         }
 
-        if (payload.storageAvailable) {
-          setStorageStatus('cloud')
-        } else {
-          setStorageStatus('local')
+        if (!cancelled) {
+          setStorageStatus(payload.storageAvailable ? 'cloud' : 'local')
         }
 
-        if (Array.isArray(payload.entries) && payload.entries.length > 0) {
+        if (Array.isArray(payload.entries) && payload.entries.length > 0 && !cancelled) {
           setMessages(
             payload.entries.map((entry) => ({
               role: entry.role,
@@ -168,10 +191,18 @@ export default function HomePage() {
           )
         }
       } catch {
-        setStorageStatus('local')
+        if (!cancelled) {
+          setStorageStatus('local')
+        }
       }
-    })()
-  }, [user?.id])
+    }
+
+    void bootstrap()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages, model }))
@@ -286,7 +317,7 @@ export default function HomePage() {
     setIsSending(true)
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -294,7 +325,7 @@ export default function HomePage() {
         body: JSON.stringify({
           model,
           userId,
-          userEmail: user?.primaryEmailAddress?.emailAddress ?? '',
+          userEmail: sessionUser?.email ?? '',
           messages: nextMessages,
         }),
       })
@@ -397,12 +428,12 @@ export default function HomePage() {
     setImageError('')
 
     try {
-      const response = await fetch('/api/image', {
+      const response = await fetch(apiUrl('/api/image'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ prompt, userId, userEmail: user?.primaryEmailAddress?.emailAddress ?? '' }),
+        body: JSON.stringify({ prompt, userId, userEmail: sessionUser?.email ?? '' }),
       })
 
       const payload = (await response.json()) as
@@ -435,24 +466,36 @@ export default function HomePage() {
             <div className="brand-mark" aria-hidden="true">
               <Sparkles />
             </div>
-            <div className="brand-copy">
+          <div className="brand-copy">
               <span className="eyebrow">Bag-v1</span>
               <h1>Ultra-clean AI workspace for Vercel.</h1>
               <p>Chat, switch models, use voice, and keep everything simple.</p>
             </div>
           </div>
           <div className="toolbar-right">
-            {user ? (
-              <UserButton />
+            {sessionUser ? (
+              <button
+                className="button button-ghost"
+                type="button"
+                onClick={async () => {
+                  await fetch(apiUrl('/api/auth/logout'), { method: 'POST' })
+                  window.localStorage.removeItem(USER_ID_KEY)
+                  window.location.reload()
+                }}
+              >
+                <RefreshCcw size={16} /> Sign out
+              </button>
             ) : (
-              <>
-                <Link className="button button-ghost" href={'/sign-in' as Route}>
-                  Sign in
-                </Link>
-                <Link className="button button-ghost" href={'/sign-up' as Route}>
-                  Sign up
-                </Link>
-              </>
+              <GoogleSignInButton
+                className="auth-button-wrap"
+                fullWidth={false}
+                onSuccess={async (signedInUser) => {
+                  setSessionUser(signedInUser)
+                  setUserId(signedInUser.id)
+                  window.localStorage.removeItem(USER_ID_KEY)
+                  window.location.reload()
+                }}
+              />
             )}
             <Link className="button button-ghost" href="/admin">
               <ExternalLink size={16} /> Admin
@@ -476,7 +519,7 @@ export default function HomePage() {
 
             <div className="chip-row">
               <span className="chip-static">OpenRouter</span>
-              <span className="chip-static">Clerk Gmail</span>
+              <span className="chip-static">Google sign-in</span>
               <span className="chip-static">Browser voice</span>
             </div>
 
@@ -504,7 +547,7 @@ export default function HomePage() {
                   <p className="section-subtitle">Current model: <strong>{currentModel.label}</strong></p>
                 </div>
                 <div className="user-chip">
-                  <span>{isLoaded && user?.primaryEmailAddress?.emailAddress ? user.primaryEmailAddress.emailAddress : 'Guest mode'}</span>
+                  <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest mode')}</span>
                 </div>
               </div>
 

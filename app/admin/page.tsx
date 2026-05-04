@@ -2,9 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import type { Route } from 'next'
-import { UserButton, useUser } from '@clerk/nextjs'
-import { ArrowLeft, Shield, RefreshCcw } from 'lucide-react'
+import { ArrowLeft, RefreshCcw, Shield } from 'lucide-react'
+import type { SessionUser } from '@/lib/auth'
+import { apiUrl } from '@/lib/client-config'
+import { GoogleSignInButton } from '@/components/google-sign-in-button'
 
 type AdminOverview = {
   storageAvailable: boolean
@@ -22,27 +23,34 @@ type AdminOverview = {
   }>
 }
 
-const ADMIN_EMAIL_KEY = 'bag-v1-admin-email'
-
 export default function AdminPage() {
-  const { user, isLoaded } = useUser()
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null)
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [error, setError] = useState('')
   const [overview, setOverview] = useState<AdminOverview | null>(null)
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(ADMIN_EMAIL_KEY)
-    if (stored) {
-      void loadOverview(stored)
-    }
+    void (async () => {
+      try {
+        const response = await fetch(apiUrl('/api/auth/me'))
+        if (!response.ok) {
+          return
+        }
+
+        const payload = (await response.json()) as { user: SessionUser | null }
+        setSessionUser(payload.user)
+      } catch {
+        // Ignore auth bootstrap errors and let the login card show.
+      }
+    })()
   }, [])
 
-  const loadOverview = async (adminEmail: string) => {
+  const loadOverview = async () => {
     setStatus('loading')
     setError('')
 
     try {
-      const response = await fetch(`/api/admin/overview?email=${encodeURIComponent(adminEmail)}`)
+      const response = await fetch(apiUrl('/api/admin/overview'))
       const payload = (await response.json()) as AdminOverview | { error: string }
 
       if (!response.ok) {
@@ -59,15 +67,20 @@ export default function AdminPage() {
     }
   }
 
+  useEffect(() => {
+    if (sessionUser?.email) {
+      void loadOverview()
+    }
+  }, [sessionUser?.email])
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const nextEmail = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || ''
-    if (!nextEmail) {
-      setError('Please sign in with Gmail first.')
+    if (!sessionUser?.email) {
+      setError('Please sign in with Google first.')
       return
     }
-    window.localStorage.setItem(ADMIN_EMAIL_KEY, nextEmail)
-    await loadOverview(nextEmail)
+
+    await loadOverview()
   }
 
   const totalModels = useMemo(() => {
@@ -93,16 +106,17 @@ export default function AdminPage() {
             <Link className="button button-ghost" href="/">
               <ArrowLeft size={16} /> Back to chat
             </Link>
-            {user ? (
-              <UserButton />
-            ) : (
-              <Link className="button button-ghost" href={'/sign-in' as Route}>
-                Sign in
-              </Link>
-            )}
-            {overview ? (
-              <button className="button button-ghost" type="button" onClick={() => loadOverview(user?.primaryEmailAddress?.emailAddress || '')}>
-                <RefreshCcw size={16} /> Refresh
+            {sessionUser ? (
+              <button
+                className="button button-ghost"
+                type="button"
+                onClick={async () => {
+                  await fetch(apiUrl('/api/auth/logout'), { method: 'POST' })
+                  setSessionUser(null)
+                  setOverview(null)
+                }}
+              >
+                <RefreshCcw size={16} /> Sign out
               </button>
             ) : null}
           </div>
@@ -112,28 +126,29 @@ export default function AdminPage() {
           <form className="admin-login" onSubmit={handleSubmit}>
             <div>
               <div className="section-title">Access</div>
-              <p className="section-subtitle">
-                Sign in with the allowlisted Gmail address to open the dashboard.
-              </p>
+              <p className="section-subtitle">Sign in with the allowlisted Google account to open the dashboard.</p>
             </div>
             <div className="admin-toolbar">
-              {user ? (
-                <button className="button button-primary" type="submit" disabled={status === 'loading' || !isLoaded}>
+              {sessionUser ? (
+                <button className="button button-primary" type="submit" disabled={status === 'loading'}>
                   {status === 'loading' ? 'Loading...' : 'Open dashboard'}
                 </button>
               ) : (
-                <>
-                  <Link className="button button-primary" href={'/sign-in' as Route}>
-                    Sign in with Google
-                  </Link>
-                  <Link className="button button-ghost" href={'/sign-up' as Route}>
-                    Create account
-                  </Link>
-                </>
+                <GoogleSignInButton
+                  className="auth-button-wrap"
+                  fullWidth={false}
+                  onSuccess={async (signedInUser) => {
+                  setSessionUser(signedInUser)
+                    await loadOverview()
+                  }}
+                />
               )}
             </div>
             <p className="meta-row">
-              Allowed admin email: <code>baginifred26@gmail.com</code>
+              Allowed admin email: <code>{process.env.ADMIN_EMAIL ?? 'not configured'}</code>
+            </p>
+            <p className="meta-row">
+              Current user: <code>{sessionUser?.email ?? 'signed out'}</code>
             </p>
             {error ? <div className="error">{error}</div> : null}
           </form>
@@ -169,9 +184,9 @@ export default function AdminPage() {
                 {totalModels.length === 0 ? (
                   <span className="pill">No model data yet</span>
                 ) : (
-                  totalModels.map(([model, count]) => (
-                    <span key={model} className="pill">
-                      {model}: {count}
+                  totalModels.map(([modelName, count]) => (
+                    <span key={modelName} className="pill">
+                      {modelName}: {count}
                     </span>
                   ))
                 )}
@@ -201,7 +216,9 @@ export default function AdminPage() {
                     ) : (
                       overview.users.map((user) => (
                         <tr key={user.userId}>
-                          <td><code>{user.userId}</code></td>
+                          <td>
+                            <code>{user.userId}</code>
+                          </td>
                           <td>{user.messageCount}</td>
                           <td>{user.lastActivityAt ?? 'n/a'}</td>
                           <td>{user.lastModel ?? 'n/a'}</td>

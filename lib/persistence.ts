@@ -7,6 +7,7 @@ export type ChatEntry = {
   content: string
   model: string
   timestamp: string
+  userEmail?: string
 }
 
 const USER_SET_KEY = 'bag-v1:users'
@@ -37,7 +38,7 @@ function safeParseEntries(raw: unknown): ChatEntry[] {
   }
 
   return raw
-    .map((entry) => {
+    .map((entry): ChatEntry | null => {
       if (!entry || typeof entry !== 'object') {
         return null
       }
@@ -52,7 +53,8 @@ function safeParseEntries(raw: unknown): ChatEntry[] {
         content: item.content,
         model: typeof item.model === 'string' ? item.model : DEFAULT_MODEL,
         timestamp: typeof item.timestamp === 'string' ? item.timestamp : new Date().toISOString(),
-      } satisfies ChatEntry
+        userEmail: typeof item.userEmail === 'string' ? item.userEmail : undefined,
+      }
     })
     .filter((entry): entry is ChatEntry => Boolean(entry))
 }
@@ -75,7 +77,12 @@ export async function appendConversationEntry(userId: string, entry: ChatEntry) 
   return { storageAvailable: true }
 }
 
-export async function appendImagePrompt(userId: string, prompt: string, model: string) {
+export async function appendImagePrompt(
+  userId: string,
+  prompt: string,
+  model: string,
+  userEmail?: string,
+) {
   const kv = await getKvClient()
   if (!kv) {
     return { storageAvailable: false }
@@ -87,6 +94,7 @@ export async function appendImagePrompt(userId: string, prompt: string, model: s
   await kv.lpush(`bag-v1:user:${userId}:images`, JSON.stringify({
     prompt,
     model,
+    userEmail,
     timestamp: new Date().toISOString(),
   }))
   await kv.ltrim(`bag-v1:user:${userId}:images`, 0, 49)

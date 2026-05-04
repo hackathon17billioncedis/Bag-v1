@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { ClerkProvider } from '@clerk/nextjs'
+import Script from 'next/script'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 
@@ -26,7 +26,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
-        <ClerkProvider>{children}</ClerkProvider>
+        <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" />
+        {children}
       </body>
     </html>
   )

@@ -8,7 +8,7 @@ Bag-v1 is now a Next.js and TypeScript app built for Vercel.
 - Moved chat and image generation into Vercel route handlers
 - Swapped Python voice tooling for browser speech recognition and speech synthesis
 - Kept the OpenRouter-powered assistant flow and image generation
-- Added Clerk Gmail sign-in and a compact admin dashboard
+- Added Google sign-in and a compact admin dashboard
 
 ## Stack
 
@@ -25,7 +25,7 @@ Bag-v1 is now a Next.js and TypeScript app built for Vercel.
 - Free browser text-to-speech with selectable voices
 - Persistent per-user chat history when Vercel KV is configured
 - Admin dashboard for usage stats and user activity, gated by `ADMIN_EMAIL`
-- Gmail sign-in/sign-up through Clerk
+- Google sign-in with a signed session cookie
 - Vercel-ready deployment structure
 
 ## Environment variables
@@ -43,10 +43,9 @@ OPENROUTER_IMAGE_MODEL=black-forest-labs/flux.2-klein-4b
 KV_REST_API_URL=your-vercel-kv-url
 KV_REST_API_TOKEN=your-vercel-kv-token
 ADMIN_EMAIL=baginifred26@gmail.com
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id_here
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+AUTH_SECRET=generate_a_long_random_secret_here
 ```
 
 ## Run locally
@@ -74,5 +73,8 @@ Vercel will detect the Next.js app automatically.
 - The admin dashboard lives at `/admin`
 - Admin access is allowlisted by `ADMIN_EMAIL`
 - `OPENROUTER_DEFAULT_MODEL` sets the starting model, while `OPENROUTER_MODELS` controls which models appear in the board
-- Enable Google OAuth inside your Clerk dashboard so Gmail sign-in and sign-up work
+- Set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` from your Google Cloud OAuth client
+- Set `AUTH_SECRET` to a long random string so the app can sign its session cookie
+- Set `NEXT_PUBLIC_API_BASE_URL` if you want the client to call an external API origin instead of the current site
+- Google sign-in and account creation use the same flow, so there is no separate signup page anymore
 - Voice features only work in browsers that support the Web Speech APIs

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { currentUser } from '@clerk/nextjs/server'
 import { getAdminOverview } from '@/lib/persistence'
+import { getSessionUserFromRequest } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(request: Request) {
   const adminEmail = process.env.ADMIN_EMAIL ?? ''
-  const user = await currentUser()
-  const email = user?.primaryEmailAddress?.emailAddress ?? ''
+  const user = await getSessionUserFromRequest(request)
+  const email = user?.email ?? ''
 
   if (!adminEmail) {
     return NextResponse.json(

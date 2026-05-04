@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { IMAGE_MODEL } from '@/lib/models'
 import { appendImagePrompt } from '@/lib/persistence'
+import { getSessionUserFromRequest } from '@/lib/auth'
 
 type ImageRequest = {
   prompt?: string
@@ -12,7 +12,6 @@ type ImageRequest = {
 const OPENROUTER_IMAGE_URL = 'https://openrouter.ai/api/v1/images/generations'
 
 export async function POST(request: Request) {
-  const session = await auth()
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
     return NextResponse.json(
@@ -20,6 +19,8 @@ export async function POST(request: Request) {
       { status: 500 },
     )
   }
+
+  const sessionUser = await getSessionUserFromRequest(request)
 
   let body: ImageRequest
   try {
@@ -29,7 +30,8 @@ export async function POST(request: Request) {
   }
 
   const prompt = body.prompt?.trim()
-  const userId = session.userId?.trim() || body.userId?.trim() || 'anonymous'
+  const userId = sessionUser?.id?.trim() || body.userId?.trim() || 'anonymous'
+  const userEmail = sessionUser?.email?.trim() || body.userEmail?.trim() || ''
   if (!prompt) {
     return NextResponse.json({ error: 'Please provide a prompt.' }, { status: 400 })
   }
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
     )
   }
 
-  await appendImagePrompt(userId, prompt, IMAGE_MODEL)
+  await appendImagePrompt(userId, prompt, IMAGE_MODEL, userEmail)
 
   return NextResponse.json({
     imageUrl,

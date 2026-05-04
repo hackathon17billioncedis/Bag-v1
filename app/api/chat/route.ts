@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { DEFAULT_MODEL, SYSTEM_PROMPT } from '@/lib/models'
 import { appendConversationEntry } from '@/lib/persistence'
+import { getSessionUserFromRequest } from '@/lib/auth'
 
 type ChatMessage = {
   role: 'system' | 'user' | 'assistant'
@@ -34,7 +34,6 @@ function sanitizeMessages(messages: ChatMessage[] | undefined, fallbackMessage: 
 }
 
 export async function POST(request: Request) {
-  const session = await auth()
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
     return NextResponse.json(
@@ -42,6 +41,8 @@ export async function POST(request: Request) {
       { status: 500 },
     )
   }
+
+  const sessionUser = await getSessionUserFromRequest(request)
 
   const siteUrl = process.env.SITE_URL ?? process.env.APP_URL ?? 'http://localhost:3000'
   const appName = process.env.APP_NAME ?? 'Bag-v1'
@@ -54,7 +55,8 @@ export async function POST(request: Request) {
   }
 
   const model = body.model?.trim() || DEFAULT_MODEL
-  const userId = session.userId?.trim() || body.userId?.trim() || 'anonymous'
+  const userId = sessionUser?.id?.trim() || body.userId?.trim() || 'anonymous'
+  const userEmail = sessionUser?.email?.trim() || body.userEmail?.trim() || ''
   const messages = sanitizeMessages(body.messages, body.message ?? '')
 
   if (messages.length === 0) {
@@ -171,12 +173,14 @@ export async function POST(request: Request) {
             role: 'user',
             content: messages.at(-1)?.content ?? '',
             model,
+            userEmail,
             timestamp: new Date().toISOString(),
           })
           await appendConversationEntry(userId, {
             role: 'assistant',
             content: reply.trim(),
             model,
+            userEmail,
             timestamp: new Date().toISOString(),
           })
         }
