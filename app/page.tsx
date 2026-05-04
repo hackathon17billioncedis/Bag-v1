@@ -81,7 +81,6 @@ export default function HomePage() {
   const [input, setInput] = useState('')
   const [model, setModel] = useState(DEFAULT_MODEL)
   const [userId, setUserId] = useState('')
-  const [storageStatus, setStorageStatus] = useState<'loading' | 'local' | 'cloud'>('loading')
   const [isSending, setIsSending] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -233,19 +232,12 @@ export default function HomePage() {
       try {
         const response = await fetch(apiUrl(`/api/history?userId=${encodeURIComponent(resolvedUserId)}`))
         if (!response.ok) {
-          if (!cancelled) {
-            setStorageStatus('local')
-          }
           return
         }
 
         const payload = (await response.json()) as {
           storageAvailable?: boolean
           entries?: Array<{ role: 'user' | 'assistant'; content: string }>
-        }
-
-        if (!cancelled) {
-          setStorageStatus(payload.storageAvailable ? 'cloud' : 'local')
         }
 
         if (Array.isArray(payload.entries) && payload.entries.length > 0 && !cancelled) {
@@ -257,9 +249,7 @@ export default function HomePage() {
           )
         }
       } catch {
-        if (!cancelled) {
-          setStorageStatus('local')
-        }
+        // Ignore history errors and keep the local session alive.
       }
     }
 
@@ -661,9 +651,8 @@ export default function HomePage() {
               <Image src="/Bag-v1.png" alt="" width={42} height={42} priority />
             </div>
             <div className="brand-copy">
-              <span className="eyebrow">Bag-v1</span>
-              <h1>Ultra-modern assistant, tuned for Vercel.</h1>
-              <p>Clean chat, locked premium tools, voice, uploads, and export-ready writing.</p>
+              <h1>BAG-V1</h1>
+              <p>AI workspace for Vercel.</p>
             </div>
           </div>
           <div className="toolbar-right">
@@ -702,45 +691,8 @@ export default function HomePage() {
 
         <section className="layout">
           <aside className="panel panel-hero">
-            <div className="hero-card hero-main">
-              <span className="eyebrow">Workspace</span>
-              <h2>Focused by default. Powerful when signed in.</h2>
-              <p>Guests stay on Llama 3.1 8B. Sign in to unlock the rest of the model roster and image generation.</p>
-            </div>
-
             <div className="hero-visual">
               <Image src="/Bag-v1-UI.png" alt="Bag-v1 interface preview" fill priority sizes="(max-width: 1100px) 100vw, 28vw" />
-              <div className="hero-visual-overlay">
-                <span className="eyebrow">Bag-v1 UI</span>
-                <strong>Polished, compact, and export-ready.</strong>
-              </div>
-            </div>
-
-            <div className="chip-row">
-              <span className="chip-static">OpenRouter</span>
-              <span className="chip-static">Google sign-in</span>
-              <span className="chip-static">Canvas export</span>
-              <span className="chip-static">File uploads</span>
-            </div>
-
-            <div className="mini-stats">
-              <div className="mini-stat">
-                <strong>{canUseAdvancedTools ? modelOptions.length : 1}</strong>
-                <span>available models</span>
-              </div>
-              <div className="mini-stat">
-                <strong>{storageStatus === 'cloud' ? 'Cloud' : 'Local'}</strong>
-                <span>history mode</span>
-              </div>
-              <div className="mini-stat">
-                <strong>{voiceEnabled ? 'On' : 'Off'}</strong>
-                <span>voice output</span>
-              </div>
-            </div>
-
-            <div className="hero-card">
-              <span className="eyebrow">Tip</span>
-              <p className="helper">Ask for a letter, code, report, or summary and the latest answer will land in the canvas so you can edit and export it fast.</p>
             </div>
           </aside>
 

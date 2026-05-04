@@ -145,14 +145,18 @@ select {
 
 .brand-copy h1 {
   margin: 0;
-  font-size: clamp(1.35rem, 2vw, 2rem);
+  font-size: clamp(1.5rem, 2.2vw, 2.25rem);
   line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
 .brand-copy p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.95rem;
+  font-size: 0.86rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
 }
 
 .layout {
@@ -176,101 +180,37 @@ select {
 }
 
 .panel-hero {
-  padding: 1.3rem;
+  padding: 0;
+  overflow: hidden;
   display: grid;
-  gap: 0.95rem;
-  align-content: start;
   position: sticky;
   top: 1.2rem;
 }
 
-.hero-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1.25rem;
-  padding: 1.1rem;
-}
-
-.hero-main {
-  display: grid;
-  gap: 0.5rem;
-}
-
 .hero-visual {
   position: relative;
-  min-height: 220px;
-  border-radius: 1.4rem;
+  min-height: 100%;
+  width: 100%;
+  aspect-ratio: 0.82;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  background:
+    linear-gradient(180deg, rgba(3, 7, 15, 0.2), rgba(3, 7, 15, 0.56)),
+    rgba(6, 10, 20, 0.95);
 }
 
 .hero-visual img {
   object-fit: cover;
 }
 
-.hero-visual-overlay {
-  position: absolute;
-  inset: auto 0 0 0;
-  padding: 1rem;
-  display: grid;
-  gap: 0.25rem;
-  background: linear-gradient(180deg, transparent, rgba(4, 8, 18, 0.84));
-}
-
-.hero-visual-overlay strong {
-  font-size: 1rem;
-}
-
-.hero-card h2,
 .section-title {
   margin: 0;
   font-size: 1.08rem;
 }
 
-.hero-card p,
 .section-subtitle,
 .meta,
 .helper {
   color: var(--muted);
-}
-
-.chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-}
-
-.chip-static {
-  padding: 0.55rem 0.75rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  font-size: 0.82rem;
-}
-
-.mini-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.mini-stat {
-  padding: 0.9rem;
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.mini-stat strong {
-  display: block;
-  font-size: 1.05rem;
-}
-
-.mini-stat span {
-  color: var(--muted);
-  font-size: 0.84rem;
 }
 
 .chat-panel {
