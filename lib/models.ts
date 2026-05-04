@@ -5,11 +5,26 @@ export type ModelOption = {
   bestFor: string
 }
 
+const MODEL_ID_ALIASES: Record<string, string> = {
+  'meta-llama/llama-3.3-70b-instruct:free': 'meta-llama/llama-3.3-70b-instruct',
+  'meta-llama/llama-3.2-3b-instruct:free': 'meta-llama/llama-3.2-3b-instruct',
+  'google/gemma-4-26b-a4b-it:free': 'google/gemma-4-26b-a4b-it',
+  'google/gemma-4-31b-it:free': 'google/gemma-4-31b-it',
+  'google/gemma-3n-e2b-it:free': 'google/gemma-3n-e2b-it',
+  'google/gemma-3n-e4b-it:free': 'google/gemma-3n-e4b-it',
+  'google/gemma-3-4b-it:free': 'google/gemma-3-4b-it',
+  'google/gemma-3-12b-it:free': 'google/gemma-3-12b-it',
+  'google/gemma-3-27b-it:free': 'google/gemma-3-27b-it',
+  'qwen/qwen3-next-80b-a3b-instruct:free': 'qwen/qwen3-next-80b-a3b-instruct',
+  'qwen/qwen3-coder:free': 'qwen/qwen3-coder',
+}
+
 export const APP_NAME = 'Bag-v1'
-export const DEFAULT_MODEL =
+export const DEFAULT_MODEL = normalizeModelId(
   process.env.OPENROUTER_DEFAULT_MODEL ??
-  process.env.OPENROUTER_MODEL ??
-  'google/gemma-3-4b-it:free'
+    process.env.OPENROUTER_MODEL ??
+    'google/gemma-3-4b-it',
+)
 export const IMAGE_MODEL = process.env.OPENROUTER_IMAGE_MODEL ?? 'black-forest-labs/flux.2-klein-4b'
 
 export const SYSTEM_PROMPT = `You are ${APP_NAME}, a warm, helpful AI assistant.
@@ -25,55 +40,55 @@ export const MODEL_OPTIONS: ModelOption[] = [
     bestFor: 'Balanced everyday chat',
   },
   {
-    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    id: 'meta-llama/llama-3.3-70b-instruct',
     label: 'Llama 3.3 70B',
     description: 'Bigger free model with more reasoning depth.',
     bestFor: 'Harder conversations',
   },
   {
-    id: 'meta-llama/llama-3.2-3b-instruct:free',
+    id: 'meta-llama/llama-3.2-3b-instruct',
     label: 'Llama 3.2 3B',
     description: 'Lightweight and quick.',
     bestFor: 'Fast, short replies',
   },
   {
-    id: 'google/gemma-4-26b-a4b-it:free',
+    id: 'google/gemma-4-26b-a4b-it',
     label: 'Gemma 4 26B A4B',
     description: 'Efficient free Gemma option.',
     bestFor: 'General reasoning',
   },
   {
-    id: 'google/gemma-4-31b-it:free',
+    id: 'google/gemma-4-31b-it',
     label: 'Gemma 4 31B',
     description: 'Larger free Gemma model.',
     bestFor: 'Deeper responses',
   },
   {
-    id: 'google/gemma-3n-e2b-it:free',
+    id: 'google/gemma-3n-e2b-it',
     label: 'Gemma 3N E2B',
     description: 'Compact and responsive.',
     bestFor: 'Quick lightweight prompts',
   },
   {
-    id: 'google/gemma-3n-e4b-it:free',
+    id: 'google/gemma-3n-e4b-it',
     label: 'Gemma 3N E4B',
     description: 'Balanced compact model.',
     bestFor: 'General lightweight chat',
   },
   {
-    id: 'google/gemma-3-4b-it:free',
+    id: 'google/gemma-3-4b-it',
     label: 'Gemma 3 4B',
     description: 'Fast free option for everyday use.',
     bestFor: 'Cheap default chat',
   },
   {
-    id: 'google/gemma-3-12b-it:free',
+    id: 'google/gemma-3-12b-it',
     label: 'Gemma 3 12B',
     description: 'Middle-ground free model.',
     bestFor: 'Slightly richer answers',
   },
   {
-    id: 'google/gemma-3-27b-it:free',
+    id: 'google/gemma-3-27b-it',
     label: 'Gemma 3 27B',
     description: 'Larger free Gemma variant.',
     bestFor: 'More thoughtful replies',
@@ -109,13 +124,13 @@ export const MODEL_OPTIONS: ModelOption[] = [
     bestFor: 'General assistant work',
   },
   {
-    id: 'qwen/qwen3-next-80b-a3b-instruct:free',
+    id: 'qwen/qwen3-next-80b-a3b-instruct',
     label: 'Qwen3 Next 80B',
     description: 'Large free Qwen model.',
     bestFor: 'Complex prompts',
   },
   {
-    id: 'qwen/qwen3-coder:free',
+    id: 'qwen/qwen3-coder',
     label: 'Qwen3 Coder',
     description: 'Best for coding help.',
     bestFor: 'Programming tasks',
@@ -134,6 +149,10 @@ export const MODEL_OPTIONS: ModelOption[] = [
   },
 ]
 
+export function normalizeModelId(modelId: string) {
+  return MODEL_ID_ALIASES[modelId] ?? modelId
+}
+
 export function getModelOptions() {
   const envModels = process.env.OPENROUTER_MODELS
     ?.split(',')
@@ -146,12 +165,13 @@ export function getModelOptions() {
 
   const defaultsById = new Map(MODEL_OPTIONS.map((model) => [model.id, model]))
 
-  return envModels.map((modelId) => defaultsById.get(modelId) ?? getModelOption(modelId))
+  return envModels.map((modelId) => defaultsById.get(normalizeModelId(modelId)) ?? getModelOption(modelId))
 }
 
 export function getModelOption(modelId: string) {
-  return MODEL_OPTIONS.find((model) => model.id === modelId) ?? {
-    id: modelId,
+  const normalizedId = normalizeModelId(modelId)
+  return MODEL_OPTIONS.find((model) => model.id === normalizedId) ?? {
+    id: normalizedId,
     label: modelId,
     description: 'Custom model selected through environment or request.',
     bestFor: 'Custom use',
