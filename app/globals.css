@@ -53,36 +53,33 @@ select {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(3, 7, 15, 0.52), rgba(3, 7, 15, 0.78)),
-    url('/Bag-v1-UI.png') center center / cover no-repeat fixed;
+  background: transparent;
 }
 
 .app-shell::before,
 .app-shell::after {
   content: '';
   position: absolute;
-  inset: auto;
-  border-radius: 999px;
-  filter: blur(100px);
+  inset: 0;
   pointer-events: none;
-  opacity: 0.7;
+  z-index: 0;
 }
 
 .app-shell::before {
-  width: 22rem;
-  height: 22rem;
-  top: -6rem;
-  left: -5rem;
-  background: rgba(124, 140, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(3, 7, 15, 0.42), rgba(3, 7, 15, 0.72)),
+    url('/Bag-v1-UI.png') center center / cover no-repeat fixed;
+  filter: blur(24px) saturate(0.82);
+  transform: scale(1.08);
+  opacity: 0.95;
 }
 
 .app-shell::after {
-  width: 18rem;
-  height: 18rem;
-  right: -4rem;
-  bottom: 8rem;
-  background: rgba(27, 198, 164, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(124, 140, 255, 0.18), transparent 32%),
+    radial-gradient(circle at top right, rgba(27, 198, 164, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(3, 7, 15, 0.28), rgba(3, 7, 15, 0.6));
+  opacity: 1;
 }
 
 .container {
