@@ -1,96 +1,75 @@
-# Bag-v1 AI Assistant
+# Bag-v1
 
-An advanced AI-powered chatbot that leverages multiple free language models from OpenRouter to provide intelligent responses and image generation capabilities.
+Bag-v1 is now a Next.js and TypeScript app built for Vercel.
+
+## What changed
+
+- Replaced Flask, Jinja, and Python runtime code with Next.js App Router
+- Moved chat and image generation into Vercel route handlers
+- Swapped Python voice tooling for browser speech recognition and speech synthesis
+- Kept the OpenRouter-powered assistant flow and image generation
+
+## Stack
+
+- Next.js App Router
+- React 19
+- TypeScript
+- OpenRouter API
 
 ## Features
 
-- 💬 Multi-model AI chatbot with various free models
-- 🖼️ Image generation using Flux 2-Klein-4B model
-- 🎤 Voice input and output capabilities
-- 🎛️ Easy model switching interface
-- 🌐 Modern, responsive UI with dark theme
-- ☁️ Deployable on Vercel
+- Chat UI with model switching
+- Image generation panel
+- Browser dictation
+- Free browser text-to-speech with selectable voices
+- Persistent per-user chat history when Vercel KV is configured
+- Admin dashboard for usage stats and user activity, gated by `ADMIN_EMAIL`
+- Gmail sign-in/sign-up through Clerk
+- Vercel-ready deployment structure
 
-## Supported Models
+## Environment variables
 
-### Language Models
-- Meta Llama 3.1 8B Instruct
-- Meta Llama 3.3 70B Instruct (Free)
-- Meta Llama 3.2 3B Instruct (Free)
-- Google Gemma 4 26B A4B IT (Free)
-- Google Gemma 4 31B IT (Free)
-- Google Gemma 3N E2B IT (Free)
-- Google Gemma 3N E4B IT (Free)
-- Google Gemma 3 4B IT (Free)
-- Google Gemma 3 12B IT (Free)
-- Google Gemma 3 27B IT (Free)
-- OpenAI GPT OSS 20B (Free)
-- Mistral Nemo
-- Mistral Small 24B Instruct 2501
-- Mistral Small 3.2 24B Instruct
-- Qwen3 Next 80B A3B Instruct (Free)
-- Qwen3 Coder (Free)
-- Qwen 2.5 7B Instruct
-- Qwen3 235B A22B 2507
+Create a `.env.local` file with:
 
-### Image Generation Model
-- Black Forest Labs Flux.2-Klein-4B
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/hackathon17billioncedis/Bag-v1.git
-cd Bag-v1
-```
-
-2. Install the required packages:
-```bash
-pip install -r requirements.txt
-```
-
-3. Create a `.env` file in the root directory with your OpenRouter API key:
 ```env
 OPENROUTER_API_KEY=your_openrouter_api_key_here
-APP_NAME=Bag-v1 AI Assistant
-APP_URL=http://localhost:5000
+APP_NAME=Bag-v1
+APP_URL=http://localhost:3000
+SITE_URL=http://localhost:3000
+OPENROUTER_MODEL=google/gemma-3-4b-it:free
+OPENROUTER_IMAGE_MODEL=black-forest-labs/flux.2-klein-4b
+KV_REST_API_URL=your-vercel-kv-url
+KV_REST_API_TOKEN=your-vercel-kv-token
+ADMIN_EMAIL=baginifred26@gmail.com
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+CLERK_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 ```
 
-## Usage
-
-To run the application locally:
+## Run locally
 
 ```bash
-python app.py
+npm install
+npm run dev
 ```
 
-The application will be available at [http://localhost:5000](http://localhost:5000).
+Then open `http://localhost:3000`.
 
-## Deployment
+## Build for Vercel
 
-### Vercel
+```bash
+npm run build
+```
 
-This project is configured for deployment on Vercel. Simply link your GitHub repository to Vercel and deploy. Make sure to set the environment variables in the Vercel dashboard.
+Vercel will detect the Next.js app automatically.
 
-### Environment Variables for Production
+## Notes
 
-- `OPENROUTER_API_KEY`: Your OpenRouter API key
-- `APP_NAME`: The name of your application
-- `APP_URL`: The URL of your deployed application
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License.
-
-## Acknowledgments
-
-- Thanks to OpenRouter for providing access to multiple AI models
-- Thanks to the open-source community for various libraries used in this project
+- Chat requests go through `app/api/chat/route.ts`
+- Image requests go through `app/api/image/route.ts`
+- History is stored through Vercel KV when available
+- The admin dashboard lives at `/admin`
+- Admin access is allowlisted by `ADMIN_EMAIL`
+- Enable Google OAuth inside your Clerk dashboard so Gmail sign-in and sign-up work
+- Voice features only work in browsers that support the Web Speech APIs
