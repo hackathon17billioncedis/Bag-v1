@@ -6,6 +6,8 @@ import {
   ArrowUpRight,
   Copy,
   Download,
+  Check,
+  ChevronDown,
   Mic,
   MicOff,
   Paperclip,
@@ -16,7 +18,7 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
-import { APP_NAME, DEFAULT_MODEL, getModelOption, getModelOptions } from '@/lib/models'
+import { APP_NAME, DEFAULT_MODEL, getModelOption, getModelOptions, type ModelOption } from '@/lib/models'
 import { apiUrl } from '@/lib/client-config'
 import type { SessionUser } from '@/lib/auth'
 import { GoogleSignInButton } from '@/components/google-sign-in-button'
@@ -88,6 +90,7 @@ export default function HomePage() {
   const [selectedVoice, setSelectedVoice] = useState('')
   const [speechRate, setSpeechRate] = useState(1.02)
   const [error, setError] = useState('')
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
 
   const [imagePrompt, setImagePrompt] = useState('A sleek futuristic AI assistant dashboard')
   const [imageUrl, setImageUrl] = useState('')
@@ -107,6 +110,20 @@ export default function HomePage() {
     () => (canUseAdvancedTools ? modelOptions : [getModelOption(DEFAULT_MODEL)]),
     [canUseAdvancedTools, modelOptions],
   )
+  const groupedModelOptions = useMemo(() => {
+    const groups = new Map<string, ModelOption[]>()
+
+    for (const option of visibleModelOptions) {
+      const list = groups.get(option.category) ?? []
+      list.push(option)
+      groups.set(option.category, list)
+    }
+
+    return Array.from(groups.entries()).map(([category, options]) => ({
+      category,
+      options,
+    }))
+  }, [visibleModelOptions])
 
   useEffect(() => {
     if (visibleModelOptions.length === 0) {
@@ -117,6 +134,21 @@ export default function HomePage() {
       setModel(visibleModelOptions[0]?.id ?? DEFAULT_MODEL)
     }
   }, [model, visibleModelOptions])
+
+  useEffect(() => {
+    if (!isModelMenuOpen) {
+      return
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsModelMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isModelMenuOpen])
 
   useEffect(() => {
     let cancelled = false
@@ -776,7 +808,7 @@ export default function HomePage() {
                   <div className="section-title">Models</div>
                   <p className="section-subtitle">
                     {canUseAdvancedTools
-                      ? 'Signed-in users can switch models.'
+                      ? 'Tap the model pill to switch quickly.'
                       : 'Guests are locked to Llama 3.1 8B until they sign in.'}
                   </p>
                 </div>
@@ -784,33 +816,66 @@ export default function HomePage() {
               </div>
 
               {canUseAdvancedTools ? (
-                <section className="model-picker">
-                  {visibleModelOptions.map((option) => {
-                    const active = option.id === model
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        className={`model-card ${active ? 'active' : ''}`}
-                        onClick={() => setModel(option.id)}
-                        aria-pressed={active}
-                      >
-                        <span className="model-name">{option.label}</span>
-                        <span className="model-desc">{option.bestFor}</span>
-                        <span className="model-meta">{option.description}</span>
-                      </button>
-                    )
-                  })}
-                </section>
-              ) : (
-                <section className="model-picker locked-model">
-                  <div className="model-card locked-card active">
-                    <span className="model-name">Llama 3.1 8B</span>
-                    <span className="model-desc">Default guest model</span>
-                    <span className="model-meta">Sign in to unlock the full model list and image generation.</span>
-                    <div className="locked-badge">
-                      <Lock size={14} /> Locked
+                <div className="model-switcher">
+                  <button
+                    className="model-switcher-trigger"
+                    type="button"
+                    onClick={() => setIsModelMenuOpen((current) => !current)}
+                    aria-expanded={isModelMenuOpen}
+                    aria-haspopup="menu"
+                  >
+                    <div className="model-switcher-copy">
+                      <span className="model-switcher-label">Model</span>
+                      <strong>{currentModel.label}</strong>
+                      <span>{currentModel.category} · {currentModel.bestFor}</span>
                     </div>
+                    <ChevronDown size={16} />
+                  </button>
+
+                  {isModelMenuOpen ? (
+                    <div className="model-switcher-menu" role="menu">
+                      {groupedModelOptions.map((group) => (
+                        <div key={group.category} className="model-switcher-group">
+                          <span className="model-switcher-group-label">{group.category}</span>
+                          {group.options.map((option) => {
+                            const active = option.id === model
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`model-switcher-item ${active ? 'active' : ''}`}
+                                onClick={() => {
+                                  setModel(option.id)
+                                  setIsModelMenuOpen(false)
+                                }}
+                                role="menuitemradio"
+                                aria-checked={active}
+                              >
+                                <div>
+                                  <strong>{option.label}</strong>
+                                  <span>{option.bestFor}</span>
+                                </div>
+                                {active ? <Check size={16} /> : null}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="model-switcher locked-model">
+                  <div className="model-switcher-trigger model-switcher-locked">
+                    <div className="model-switcher-copy">
+                      <span className="model-switcher-label">Model</span>
+                      <strong>Llama 3.1 8B</strong>
+                      <span>Default guest model</span>
+                    </div>
+                    <Lock size={16} />
+                  </div>
+                  <div className="locked-cta">
+                    <p>Sign in to unlock the full model list and image generation.</p>
                     <GoogleSignInButton className="auth-button-wrap" fullWidth onSuccess={async (signedInUser) => {
                       setSessionUser(signedInUser)
                       setUserId(signedInUser.id)
@@ -818,7 +883,7 @@ export default function HomePage() {
                       window.location.reload()
                     }} />
                   </div>
-                </section>
+                </div>
               )}
 
               <div className="messages">
