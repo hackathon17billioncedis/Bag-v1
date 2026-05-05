@@ -342,7 +342,6 @@ export default function HomePage() {
         if (reply) {
           setMessages((current) => [...current, { role: 'assistant', content: reply }])
           setCanvasText(reply)
-          speak(reply)
         }
         if (outboundAttachments.length > 0) {
           clearAttachments()
@@ -402,7 +401,6 @@ export default function HomePage() {
 
       if (finalReply) {
         setCanvasText(finalReply)
-        speak(finalReply)
       }
 
       if (outboundAttachments.length > 0) {
@@ -581,7 +579,7 @@ export default function HomePage() {
         <header className="topbar">
           <div className="brand">
             <div className="brand-mark brand-logo" aria-hidden="true">
-              <Image src="/Bag-v1-UI.png" alt="" width={42} height={42} priority />
+              <Image src="/Bag-v1.png" alt="" width={42} height={42} priority />
             </div>
             <div className="brand-copy">
               <h1>BAG-V1</h1>
@@ -770,22 +768,6 @@ export default function HomePage() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="workspace-actions-row">
-            <div className="quick-prompts quick-prompts-inline">
-              {QUICK_PROMPTS.map((prompt) => (
-                <button
-                  key={prompt}
-                  className="chip"
-                  type="button"
-                  onClick={() => submitChat(prompt)}
-                  disabled={isSending}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <form className="composer" onSubmit={handleSubmit}>
             <input ref={fileInputRef} type="file" className="sr-only" multiple onChange={handleAttachmentPick} />
 
@@ -928,6 +910,22 @@ export default function HomePage() {
 
             <p className="helper">{error || 'Type, dictate, upload, or use voice output.'}</p>
           </form>
+
+          <div className="workspace-actions-row">
+            <div className="quick-prompts quick-prompts-inline">
+              {QUICK_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  className="chip"
+                  type="button"
+                  onClick={() => submitChat(prompt)}
+                  disabled={isSending}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {activeToolPanel ? (
             <div className="tool-sheet">
