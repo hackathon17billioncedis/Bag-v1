@@ -125,3 +125,6 @@ export function GoogleSignInButton({ onSuccess, className, fullWidth = false }: 
     </div>
   )
 }
+
+// This file has been replaced with email-otp-auth.tsx
+// Google authentication has been removed in favor of email OTP authentication

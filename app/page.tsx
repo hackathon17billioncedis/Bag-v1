@@ -21,7 +21,7 @@ import {
 import { APP_NAME, DEFAULT_MODEL, getModelOption, getModelOptions, type ModelOption } from '@/lib/models'
 import { apiUrl } from '@/lib/client-config'
 import type { SessionUser } from '@/lib/auth'
-import { GoogleSignInButton } from '@/components/google-sign-in-button'
+import { EmailOTPAuth } from '@/components/email-otp-auth'
 import Image from 'next/image'
 
 type ChatMessage = {
@@ -668,7 +668,7 @@ export default function HomePage() {
                 <RefreshCcw size={16} /> Sign out
               </button>
             ) : (
-              <GoogleSignInButton
+              <EmailOTPAuth
                 className="auth-button-wrap"
                 fullWidth={false}
                 onSuccess={async (signedInUser) => {
@@ -833,7 +833,7 @@ export default function HomePage() {
                   </div>
                   <div className="locked-cta">
                     <p>Sign in to unlock the full model list and image generation.</p>
-                    <GoogleSignInButton className="auth-button-wrap" fullWidth onSuccess={async (signedInUser) => {
+                    <EmailOTPAuth className="auth-button-wrap" fullWidth onSuccess={async (signedInUser) => {
                       setSessionUser(signedInUser)
                       setUserId(signedInUser.id)
                       window.localStorage.removeItem(USER_ID_KEY)
@@ -1022,7 +1022,7 @@ export default function HomePage() {
                     <span className="eyebrow">Premium tool</span>
                     <h3>Sign in to generate images.</h3>
                     <p>The image model stays hidden until you sign in. That keeps the guest UI clean and locked to the default chat model.</p>
-                    <GoogleSignInButton className="auth-button-wrap" fullWidth onSuccess={async (signedInUser) => {
+                    <EmailOTPAuth className="auth-button-wrap" fullWidth onSuccess={async (signedInUser) => {
                       setSessionUser(signedInUser)
                       setUserId(signedInUser.id)
                       window.localStorage.removeItem(USER_ID_KEY)

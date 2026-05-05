@@ -1,6 +1,6 @@
 # Bag-v1
 
-Bag-v1 is now a Next.js and TypeScript app built for Vercel.
+A Next.js and TypeScript upgrade of the Bag-v1 assistant for Vercel, now with email OTP authentication.
 
 ## What changed
 
@@ -8,7 +8,8 @@ Bag-v1 is now a Next.js and TypeScript app built for Vercel.
 - Moved chat and image generation into Vercel route handlers
 - Swapped Python voice tooling for browser speech recognition and speech synthesis
 - Kept the OpenRouter-powered assistant flow and image generation
-- Added Google sign-in and a compact admin dashboard
+- Upgraded from Google sign-in to a secure email OTP-based authentication system
+- Added a compact admin dashboard
 
 ## Stack
 
@@ -25,7 +26,7 @@ Bag-v1 is now a Next.js and TypeScript app built for Vercel.
 - Free browser text-to-speech with selectable voices
 - Persistent per-user chat history when Vercel KV is configured
 - Admin dashboard for usage stats and user activity, gated by `ADMIN_EMAIL`
-- Google sign-in with a signed session cookie
+- Secure email OTP-based authentication system
 - Vercel-ready deployment structure
 
 ## Environment variables
@@ -43,7 +44,8 @@ OPENROUTER_IMAGE_MODEL=black-forest-labs/flux.2-klein-4b
 KV_REST_API_URL=your-vercel-kv-url
 KV_REST_API_TOKEN=your-vercel-kv-token
 ADMIN_EMAIL=baginifred26@gmail.com
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id_here
+SMTP_USER=your_smtp_email@example.com
+SMTP_PASSWORD=your_smtp_password
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
 AUTH_SECRET=generate_a_long_random_secret_here
 ```
