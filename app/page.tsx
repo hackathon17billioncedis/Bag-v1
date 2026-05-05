@@ -813,14 +813,21 @@ export default function HomePage() {
                     className="tools-popover-item"
                     type="button"
                     onClick={() => {
+                      if (!canUseAdvancedTools) {
+                        setIsToolMenuOpen(false)
+                        setAuthMode('sign-in')
+                        setIsAuthMenuOpen(true)
+                        return
+                      }
                       setActiveToolPanel('canvas')
                       setIsToolMenuOpen(false)
                     }}
+                    disabled={!canUseAdvancedTools}
                   >
                     <Copy size={16} />
                     <span>
                       <strong>Canvas</strong>
-                      <small>Edit, copy, export</small>
+                      <small>{canUseAdvancedTools ? 'Edit, copy, export' : 'Sign in to unlock canvas'}</small>
                     </span>
                   </button>
                   <button
@@ -842,14 +849,21 @@ export default function HomePage() {
                     className="tools-popover-item"
                     type="button"
                     onClick={() => {
+                      if (!canUseAdvancedTools) {
+                        setIsToolMenuOpen(false)
+                        setAuthMode('sign-in')
+                        setIsAuthMenuOpen(true)
+                        return
+                      }
                       setIsToolMenuOpen(false)
                       openFilePicker()
                     }}
+                    disabled={!canUseAdvancedTools}
                   >
                     <Paperclip size={16} />
                     <span>
                       <strong>Upload file</strong>
-                      <small>Attach files to chat</small>
+                      <small>{canUseAdvancedTools ? 'Attach files to chat' : 'Sign in to unlock uploads'}</small>
                     </span>
                   </button>
                 </div>

@@ -2047,7 +2047,7 @@ body {
 .workspace-actions-row {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: center;
   gap: 0.85rem;
   flex-wrap: wrap;
   margin-top: 0.2rem;
@@ -2056,7 +2056,9 @@ body {
 .quick-prompts-inline {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 0.45rem;
+  width: 100%;
 }
 
 .quick-prompts-inline .chip {
