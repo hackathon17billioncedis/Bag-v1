@@ -2127,6 +2127,186 @@ body {
   margin-left: 0.35rem;
 }
 
+@media (max-width: 1024px) {
+  .container {
+    width: min(100% - 1rem, 1240px);
+    padding: 0.85rem 0 1rem;
+  }
+
+  .workspace-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-sidebar {
+    position: static;
+    max-height: none;
+  }
+
+  .chat-panel {
+    min-height: auto;
+  }
+
+  .messages,
+  .composer {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    padding: 0.75rem 0.8rem;
+  }
+
+  .brand-copy h1 {
+    font-size: 0.95rem;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .workspace-panel {
+    padding: 0.8rem;
+  }
+
+  .workspace-layout {
+    gap: 0.8rem;
+  }
+
+  .chat-header,
+  .messages,
+  .composer {
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+  }
+
+  .chat-header {
+    padding-top: 0.85rem;
+    padding-bottom: 0.7rem;
+  }
+
+  .messages {
+    padding-top: 1rem;
+  }
+
+  .empty-state {
+    padding-top: 9vh;
+  }
+
+  .title-row {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .header-model-slot,
+  .user-chip {
+    width: 100%;
+  }
+
+  .header-model-switcher,
+  .locked-model-space {
+    width: 100%;
+  }
+
+  .model-switcher-trigger {
+    width: 100%;
+  }
+
+  .composer-row {
+    gap: 0.75rem;
+  }
+
+  .composer-send-stack {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+
+  .composer-send-stack .button.button-primary {
+    flex: 1 1 140px;
+  }
+
+  .quick-prompts-inline {
+    justify-content: center;
+    gap: 0.55rem;
+  }
+
+  .quick-prompts-inline .chip {
+    flex: 1 1 calc(50% - 0.55rem);
+    justify-content: center;
+  }
+
+  .message {
+    max-width: 100%;
+  }
+
+  .message-actions {
+    gap: 0.35rem;
+  }
+
+  .sidebar-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sidebar-header .button {
+    width: 100%;
+  }
+
+  .sidebar-item,
+  .sidebar-memory,
+  .locked-panel {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .container {
+    width: min(100% - 0.7rem, 1240px);
+    padding: 0.7rem 0 0.85rem;
+  }
+
+  .topbar {
+    gap: 0.6rem;
+  }
+
+  .workspace-panel {
+    padding: 0.7rem;
+  }
+
+  .chat-header,
+  .messages,
+  .composer {
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
+  }
+
+  .section-title {
+    line-height: 1.2;
+  }
+
+  .section-subtitle,
+  .helper {
+    font-size: 0.92rem;
+  }
+
+  .quick-prompts-inline .chip {
+    flex-basis: 100%;
+  }
+
+  .composer-send-stack .button.button-primary {
+    flex-basis: 100%;
+  }
+
+  .composer-send-stack .icon-button {
+    width: 38px;
+    height: 38px;
+  }
+}
+
 .workspace-topbar {
   display: flex;
   align-items: flex-start;
