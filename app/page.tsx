@@ -89,6 +89,7 @@ export default function HomePage() {
   const [isAuthMenuOpen, setIsAuthMenuOpen] = useState(false)
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false)
+  const [activeToolPanel, setActiveToolPanel] = useState<'canvas' | 'image' | null>(null)
 
   const [imagePrompt, setImagePrompt] = useState('A sleek futuristic AI assistant dashboard')
   const [imageUrl, setImageUrl] = useState('')
@@ -139,6 +140,7 @@ export default function HomePage() {
         setIsModelMenuOpen(false)
         setIsToolMenuOpen(false)
         setIsAuthMenuOpen(false)
+        setActiveToolPanel(null)
       }
     }
 
@@ -184,6 +186,7 @@ export default function HomePage() {
         setImagePrompt('A sleek futuristic AI assistant dashboard')
         setImageUrl('')
         setCanvasText('')
+        setActiveToolPanel(null)
       }
 
       if (!resolvedSessionUser) {
@@ -578,7 +581,7 @@ export default function HomePage() {
         <header className="topbar">
           <div className="brand">
             <div className="brand-mark brand-logo" aria-hidden="true">
-              <Image src="/Bag-v1.png" alt="" width={42} height={42} priority />
+              <Image src="/Bag-v1-UI.png" alt="" width={42} height={42} priority />
             </div>
             <div className="brand-copy">
               <h1>BAG-V1</h1>
@@ -623,11 +626,6 @@ export default function HomePage() {
             )}
           </div>
 
-          <div className="toolbar-right">
-            <button className="button button-ghost" type="button" onClick={() => (window.location.href = '/admin')}>
-              Admin
-            </button>
-          </div>
         </header>
 
         <section className="panel chat-panel workspace-panel">
@@ -635,95 +633,10 @@ export default function HomePage() {
             <div className="title-row">
               <div>
                 <div className="section-title">Chat workspace</div>
-                <p className="section-subtitle">
-                  {currentModel.label}
-                  {canUseAdvancedTools && webSearchEnabled ? ' · Web search on' : ''}
-                </p>
               </div>
               <div className="user-chip">
                 <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest mode')}</span>
               </div>
-            </div>
-
-            <div className="workspace-topbar">
-              <div className="quick-prompts quick-prompts-inline">
-                {QUICK_PROMPTS.map((prompt) => (
-                  <button
-                    key={prompt}
-                    className="chip"
-                    type="button"
-                    onClick={() => submitChat(prompt)}
-                    disabled={isSending}
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-
-              {canUseAdvancedTools ? (
-                <div className="model-switcher model-switcher-inline">
-                  <button
-                    className="model-switcher-trigger model-switcher-compact"
-                    type="button"
-                    onClick={() => setIsModelMenuOpen((current) => !current)}
-                    aria-expanded={isModelMenuOpen}
-                    aria-haspopup="menu"
-                  >
-                    <div className="model-switcher-copy">
-                      <span className="model-switcher-label">Current model</span>
-                      <strong>{currentModel.label}</strong>
-                    </div>
-                    <ChevronDown size={16} />
-                  </button>
-
-                  {isModelMenuOpen ? (
-                    <div className="model-switcher-menu" role="menu">
-                      {groupedModelOptions.map((group) => (
-                        <div key={group.category} className="model-switcher-group">
-                          <span className="model-switcher-group-label">{group.category}</span>
-                          {group.options.map((option) => {
-                            const active = option.id === model
-                            return (
-                              <button
-                                key={option.id}
-                                type="button"
-                                className={`model-switcher-item ${active ? 'active' : ''}`}
-                                onClick={() => {
-                                  setModel(option.id)
-                                  setIsModelMenuOpen(false)
-                                }}
-                                role="menuitemradio"
-                                aria-checked={active}
-                              >
-                                <div>
-                                  <strong>{option.label}</strong>
-                                  <span>{option.bestFor}</span>
-                                </div>
-                                {active ? <Check size={16} /> : null}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="locked-model-space">
-                  <button
-                    className="model-switcher-trigger model-switcher-locked model-switcher-compact"
-                    type="button"
-                    disabled
-                  >
-                    <div className="model-switcher-copy">
-                      <span className="model-switcher-label">Model</span>
-                      <strong>Llama 3.1 8B</strong>
-                      <span>Locked until sign in</span>
-                    </div>
-                    <Lock size={16} />
-                  </button>
-                </div>
-              )}
             </div>
 
             {isAuthMenuOpen && !sessionUser ? (
@@ -791,6 +704,87 @@ export default function HomePage() {
             <div ref={messagesEndRef} />
           </div>
 
+          <div className="workspace-actions-row">
+            <div className="quick-prompts quick-prompts-inline">
+              {QUICK_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  className="chip"
+                  type="button"
+                  onClick={() => submitChat(prompt)}
+                  disabled={isSending}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
+            {canUseAdvancedTools ? (
+              <div className="model-switcher model-switcher-inline">
+                <button
+                  className="model-switcher-trigger model-switcher-compact"
+                  type="button"
+                  onClick={() => setIsModelMenuOpen((current) => !current)}
+                  aria-expanded={isModelMenuOpen}
+                  aria-haspopup="menu"
+                >
+                  <div className="model-switcher-copy">
+                    <span className="model-switcher-label">Model</span>
+                    <strong>{currentModel.label}</strong>
+                  </div>
+                  <ChevronDown size={16} />
+                </button>
+
+                {isModelMenuOpen ? (
+                  <div className="model-switcher-menu" role="menu">
+                    {groupedModelOptions.map((group) => (
+                      <div key={group.category} className="model-switcher-group">
+                        <span className="model-switcher-group-label">{group.category}</span>
+                        {group.options.map((option) => {
+                          const active = option.id === model
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              className={`model-switcher-item ${active ? 'active' : ''}`}
+                              onClick={() => {
+                                setModel(option.id)
+                                setIsModelMenuOpen(false)
+                              }}
+                              role="menuitemradio"
+                              aria-checked={active}
+                            >
+                              <div>
+                                <strong>{option.label}</strong>
+                                <span>{option.bestFor}</span>
+                              </div>
+                              {active ? <Check size={16} /> : null}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="locked-model-space">
+                <button
+                  className="model-switcher-trigger model-switcher-locked model-switcher-compact"
+                  type="button"
+                  disabled
+                >
+                  <div className="model-switcher-copy">
+                    <span className="model-switcher-label">Model</span>
+                    <strong>Llama 3.1 8B</strong>
+                    <span>Locked until sign in</span>
+                  </div>
+                  <Lock size={16} />
+                </button>
+              </div>
+            )}
+          </div>
+
           <form className="composer" onSubmit={handleSubmit}>
             <input ref={fileInputRef} type="file" className="sr-only" multiple onChange={handleAttachmentPick} />
 
@@ -836,9 +830,8 @@ export default function HomePage() {
                     className="tools-popover-item"
                     type="button"
                     onClick={() => {
+                      setActiveToolPanel('canvas')
                       setIsToolMenuOpen(false)
-                      canvasRef.current?.focus()
-                      canvasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                     }}
                   >
                     <Copy size={16} />
@@ -851,9 +844,8 @@ export default function HomePage() {
                     className="tools-popover-item"
                     type="button"
                     onClick={() => {
+                      setActiveToolPanel('image')
                       setIsToolMenuOpen(false)
-                      imageRef.current?.focus()
-                      imageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                     }}
                     disabled={!canUseAdvancedTools}
                   >
@@ -936,71 +928,77 @@ export default function HomePage() {
             <p className="helper">{error || 'Type, dictate, upload, or use voice output.'}</p>
           </form>
 
-          <div className="workspace-drawer">
-            <div className="sidebar-card">
-              <div className="section-title">Canvas</div>
-              <textarea
-                ref={canvasRef}
-                className="textarea canvas-textarea"
-                value={canvasText}
-                onChange={(event) => setCanvasText(event.target.value)}
-                placeholder="The latest assistant reply will appear here. Edit it freely for letters, code, and documents."
-                rows={12}
-              />
-
-              <div className="canvas-actions">
-                <button className="button button-ghost" type="button" onClick={copyCanvas} disabled={!canvasText.trim()}>
-                  <Copy size={16} /> Copy
-                </button>
-                <button className="button button-ghost" type="button" onClick={downloadTextFile} disabled={!canvasText.trim()}>
-                  <Download size={16} /> TXT
-                </button>
-                <button className="button button-ghost" type="button" onClick={downloadPdfFile} disabled={!canvasText.trim()}>
-                  <Download size={16} /> PDF
-                </button>
-                <button className="button button-ghost" type="button" onClick={downloadWordFile} disabled={!canvasText.trim()}>
-                  <Download size={16} /> Word
-                </button>
-              </div>
-            </div>
-
-            <div className="sidebar-card">
-              <div className="section-title">Image generation</div>
-
-              {canUseAdvancedTools ? (
-                <>
+          {activeToolPanel ? (
+            <div className="tool-sheet">
+              {activeToolPanel === 'canvas' ? (
+                <div className="sidebar-card">
+                  <div className="section-title">Canvas</div>
                   <textarea
-                    ref={imageRef}
-                    className="textarea"
-                    value={imagePrompt}
-                    onChange={(event) => setImagePrompt(event.target.value)}
-                    placeholder="Describe the image you want..."
-                    rows={4}
+                    ref={canvasRef}
+                    className="textarea canvas-textarea"
+                    value={canvasText}
+                    onChange={(event) => setCanvasText(event.target.value)}
+                    placeholder="The latest assistant reply will appear here. Edit it freely for letters, code, and documents."
+                    rows={12}
                   />
-                  <button className="button button-primary" type="button" onClick={generateImage} disabled={isGeneratingImage}>
-                    <Sparkles size={16} /> {isGeneratingImage ? 'Generating...' : 'Generate image'}
-                  </button>
 
-                  {imageError ? <div className="error">{imageError}</div> : null}
-
-                  <div className="image-preview">
-                    {imageUrl ? (
-                      <img src={imageUrl} alt="Generated result" />
-                    ) : (
-                      <div className="placeholder">
-                        <strong>No image yet.</strong>
-                        <div className="meta">Generate one to preview the OpenRouter image flow.</div>
-                      </div>
-                    )}
+                  <div className="canvas-actions">
+                    <button className="button button-ghost" type="button" onClick={copyCanvas} disabled={!canvasText.trim()}>
+                      <Copy size={16} /> Copy
+                    </button>
+                    <button className="button button-ghost" type="button" onClick={downloadTextFile} disabled={!canvasText.trim()}>
+                      <Download size={16} /> TXT
+                    </button>
+                    <button className="button button-ghost" type="button" onClick={downloadPdfFile} disabled={!canvasText.trim()}>
+                      <Download size={16} /> PDF
+                    </button>
+                    <button className="button button-ghost" type="button" onClick={downloadWordFile} disabled={!canvasText.trim()}>
+                      <Download size={16} /> Word
+                    </button>
                   </div>
-                </>
-              ) : (
-                <div className="locked-panel">
-                  <p className="helper">Sign in to use image generation.</p>
                 </div>
-              )}
+              ) : null}
+
+              {activeToolPanel === 'image' ? (
+                <div className="sidebar-card">
+                  <div className="section-title">Image generation</div>
+
+                  {canUseAdvancedTools ? (
+                    <>
+                      <textarea
+                        ref={imageRef}
+                        className="textarea"
+                        value={imagePrompt}
+                        onChange={(event) => setImagePrompt(event.target.value)}
+                        placeholder="Describe the image you want..."
+                        rows={4}
+                      />
+                      <button className="button button-primary" type="button" onClick={generateImage} disabled={isGeneratingImage}>
+                        <Sparkles size={16} /> {isGeneratingImage ? 'Generating...' : 'Generate image'}
+                      </button>
+
+                      {imageError ? <div className="error">{imageError}</div> : null}
+
+                      <div className="image-preview">
+                        {imageUrl ? (
+                          <img src={imageUrl} alt="Generated result" />
+                        ) : (
+                          <div className="placeholder">
+                            <strong>No image yet.</strong>
+                            <div className="meta">Generate one to preview the OpenRouter image flow.</div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="locked-panel">
+                      <p className="helper">Sign in to use image generation.</p>
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
-          </div>
+          ) : null}
         </section>
       </div>
     </main>

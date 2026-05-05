@@ -2020,6 +2020,15 @@ body {
   margin-top: 0.85rem;
 }
 
+.workspace-actions-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+}
+
 .quick-prompts-inline {
   display: flex;
   flex-wrap: wrap;
@@ -2028,6 +2037,16 @@ body {
 
 .quick-prompts-inline .chip {
   border-radius: 999px;
+}
+
+.tool-sheet {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.tool-sheet .sidebar-card {
+  padding: 1rem;
 }
 
 .model-switcher-inline {
