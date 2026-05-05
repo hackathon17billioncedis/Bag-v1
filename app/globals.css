@@ -2035,6 +2035,82 @@ body {
   padding: 1rem;
 }
 
+.workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.workspace-layout.sidebar-closed {
+  grid-template-columns: 1fr;
+}
+
+.workspace-layout.sidebar-closed .workspace-sidebar {
+  display: none;
+}
+
+.workspace-sidebar {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.sidebar-section {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.sidebar-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.sidebar-item,
+.sidebar-memory {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.85rem 0.9rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+.sidebar-item small,
+.sidebar-memory small {
+  color: var(--muted);
+}
+
+.sidebar-item.active {
+  border-color: rgba(124, 140, 255, 0.55);
+  background: rgba(124, 140, 255, 0.12);
+}
+
+.sidebar-item strong,
+.sidebar-memory strong {
+  font-size: 0.94rem;
+}
+
+.sidebar-memory {
+  align-items: start;
+}
+
+.sidebar-toggle {
+  margin-left: 0.35rem;
+}
+
 .workspace-topbar {
   display: flex;
   align-items: flex-start;
@@ -2226,6 +2302,14 @@ body {
 }
 
 @media (max-width: 820px) {
+  .workspace-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-sidebar {
+    position: static;
+  }
+
   .workspace-topbar,
   .composer-toolbar,
   .composer-send-stack {

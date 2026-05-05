@@ -15,6 +15,7 @@ type ChatRequest = {
   webSearchEnabled?: boolean
   userId?: string
   userEmail?: string
+  chatId?: string
   attachments?: Array<{
     id?: string
     name?: string
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
 
   const userId = sessionUser?.id?.trim() || body.userId?.trim() || 'anonymous'
   const userEmail = sessionUser?.email?.trim() || body.userEmail?.trim() || ''
+  const chatId = body.chatId?.trim() || 'default'
   const model = resolveModel(body.model, Boolean(sessionUser))
   const webSearchEnabled = Boolean(sessionUser) && body.webSearchEnabled === true
   const attachmentsBlock = buildAttachmentBlock(body.attachments)
@@ -123,8 +125,8 @@ export async function POST(request: Request) {
       {
         role: 'system',
         content: webSearchEnabled
-          ? `${SYSTEM_PROMPT}\nUse web search when the user asks for current, recent, local, or fact-sensitive information. Keep the answer grounded, concise, and cite useful sources naturally.`
-          : SYSTEM_PROMPT,
+          ? `${SYSTEM_PROMPT}\nYou are always Bag-v1, even if the underlying model changes.\nUse web search when the user asks for current, recent, local, or fact-sensitive information. Keep the answer grounded, concise, and cite useful sources naturally.`
+          : `${SYSTEM_PROMPT}\nYou are always Bag-v1, even if the underlying model changes.`,
       },
       ...contextualMessages,
     ],
@@ -235,20 +237,21 @@ export async function POST(request: Request) {
           }
         }
 
-        if (reply.trim()) {
-          await appendConversationEntry(userId, {
+        if (reply.trim() && sessionUser) {
+          const timestamp = new Date().toISOString()
+          await appendConversationEntry(userId, chatId, {
             role: 'user',
             content: messages.at(-1)?.content ?? '',
             model,
             userEmail,
-            timestamp: new Date().toISOString(),
+            timestamp,
           })
-          await appendConversationEntry(userId, {
+          await appendConversationEntry(userId, chatId, {
             role: 'assistant',
             content: reply.trim(),
             model,
             userEmail,
-            timestamp: new Date().toISOString(),
+            timestamp,
           })
         }
 

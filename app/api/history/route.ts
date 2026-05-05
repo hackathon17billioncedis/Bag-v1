@@ -4,13 +4,13 @@ import { getSessionUserFromRequest } from '@/lib/auth'
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const userId = url.searchParams.get('userId')
+  const chatId = url.searchParams.get('chatId') ?? undefined
   const sessionUser = await getSessionUserFromRequest(request)
 
-  if (!userId && !sessionUser?.id) {
-    return NextResponse.json({ error: 'Missing userId.' }, { status: 400 })
+  if (!sessionUser?.id) {
+    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
   }
 
-  const history = await getConversationHistory(sessionUser?.id ?? userId ?? '')
+  const history = await getConversationHistory(sessionUser.id, chatId)
   return NextResponse.json(history)
 }

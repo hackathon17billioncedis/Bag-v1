@@ -60,7 +60,6 @@ export async function createSessionToken(user: SessionUser) {
     .setAudience(SESSION_AUDIENCE)
     .setSubject(user.id)
     .setIssuedAt()
-    .setExpirationTime('30d')
     .sign(new TextEncoder().encode(getAuthSecret()))
 }
 

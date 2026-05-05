@@ -39,7 +39,7 @@ APP_NAME=Bag-v1
 APP_URL=http://localhost:3000
 SITE_URL=http://localhost:3000
 OPENROUTER_DEFAULT_MODEL=meta-llama/llama-3.1-8b-instruct
-OPENROUTER_MODELS=meta-llama/llama-3.1-8b-instruct,meta-llama/llama-3.3-70b-instruct:free,meta-llama/llama-3.2-3b-instruct:free,google/gemma-4-26b-a4b-it:free,google/gemma-4-31b-it:free,google/gemma-3n-e2b-it:free,google/gemma-3n-e4b-it:free,google/gemma-3-4b-it:free,google/gemma-3-12b-it:free,google/gemma-3-27b-it:free,openai/gpt-oss-20b:free,mistralai/mistral-nemo,mistralai/mistral-small-24b-instruct-2501,mistralai/mistral-small-3.2-24b-instruct,qwen/qwen3-next-80b-a3b-instruct:free,qwen/qwen3-coder:free,qwen/qwen-2.5-7b-instruct,qwen/qwen3-235b-a22b-2507
+OPENROUTER_MODELS=meta-llama/llama-3.1-8b-instruct,google/gemma-4-26b-a4b-it:free,openai/gpt-oss-20b:free,mistralai/mistral-nemo,mistralai/mistral-small-24b-instruct-2501,mistralai/mistral-small-3.2-24b-instruct,qwen/qwen-2.5-7b-instruct,qwen/qwen3-235b-a22b-2507
 OPENROUTER_IMAGE_MODEL=black-forest-labs/flux.2-klein-4b
 KV_REST_API_URL=your-vercel-kv-url
 KV_REST_API_TOKEN=your-vercel-kv-token
@@ -78,7 +78,7 @@ Vercel will detect the Next.js app automatically.
 - History is stored through Vercel KV when available
 - The admin dashboard lives at `/admin`
 - Admin access is allowlisted by `ADMIN_EMAIL`
-- `OPENROUTER_DEFAULT_MODEL` sets the starting model, while `OPENROUTER_MODELS` controls which models appear in the board
+- `OPENROUTER_DEFAULT_MODEL` sets the starting model, while `OPENROUTER_MODELS` controls which of the supported models appear in the board
 - Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` from your mail provider
 - If you use Gmail SMTP, enable 2-Step Verification on that account and use a Google App Password for `SMTP_PASSWORD`
 - Set `AUTH_SECRET` to a long random string so the app can sign its session cookie

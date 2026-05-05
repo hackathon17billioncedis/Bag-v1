@@ -1,7 +1,7 @@
 'use client'
 /* eslint-disable @next/next/no-img-element */
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUpRight,
   Check,
@@ -14,6 +14,7 @@ import {
   MicOff,
   Paperclip,
   Plus,
+  Menu,
   RefreshCcw,
   Search,
   Sparkles,
@@ -31,6 +32,24 @@ import { APP_NAME, DEFAULT_MODEL, getModelOption, getModelOptions, type ModelOpt
 type ChatMessage = {
   role: 'user' | 'assistant'
   content: string
+}
+
+type ConversationThread = {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  messageCount: number
+  lastMessageAt: string | null
+  lastMessagePreview: string | null
+  lastModel: string | null
+}
+
+type MemoryItem = {
+  id: string
+  text: string
+  createdAt: string
+  sourceChatId: string
 }
 
 type UploadedFile = {
@@ -90,6 +109,11 @@ export default function HomePage() {
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false)
   const [activeToolPanel, setActiveToolPanel] = useState<'canvas' | 'image' | null>(null)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [chatId, setChatId] = useState('')
+  const [threads, setThreads] = useState<ConversationThread[]>([])
+  const [memory, setMemory] = useState<MemoryItem[]>([])
+  const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true)
 
   const [imagePrompt, setImagePrompt] = useState('A sleek futuristic AI assistant dashboard')
   const [imageUrl, setImageUrl] = useState('')
@@ -124,6 +148,121 @@ export default function HomePage() {
     return Array.from(groups.entries()).map(([category, options]) => ({ category, options }))
   }, [visibleModelOptions])
 
+  const syncWorkspace = async (nextChatId?: string, nextMessage?: ChatMessage[]) => {
+    if (!sessionUser?.id) {
+      return
+    }
+
+    try {
+      const response = await fetch(apiUrl('/api/conversations'))
+      if (!response.ok) {
+        return
+      }
+
+      const payload = (await response.json()) as {
+        threads?: ConversationThread[]
+        memory?: MemoryItem[]
+        activeChatId?: string
+      }
+
+      if (Array.isArray(payload.threads)) {
+        setThreads(payload.threads)
+      }
+
+      if (Array.isArray(payload.memory)) {
+        setMemory(payload.memory)
+      }
+
+      const resolvedChatId = nextChatId ?? payload.activeChatId ?? chatId
+      if (resolvedChatId) {
+        setChatId(resolvedChatId)
+        window.localStorage.setItem(`bag-v1:active-chat:${sessionUser.id}`, resolvedChatId)
+      }
+
+      if (Array.isArray(nextMessage) && nextMessage.length > 0) {
+        setMessages(nextMessage)
+      }
+    } catch {
+      // Ignore sidebar refresh issues.
+    }
+  }
+
+  const loadConversation = async (conversationId: string) => {
+    if (!sessionUser?.id) {
+      return
+    }
+
+    setChatId(conversationId)
+    setActiveToolPanel(null)
+    setError('')
+
+    try {
+      const response = await fetch(apiUrl(`/api/history?chatId=${encodeURIComponent(conversationId)}`))
+      if (!response.ok) {
+        return
+      }
+
+      const payload = (await response.json()) as {
+        entries?: Array<{ role: 'user' | 'assistant'; content: string }>
+      }
+
+      const entries = Array.isArray(payload.entries)
+        ? payload.entries.map((entry) => ({
+            role: entry.role,
+            content: entry.content,
+          }))
+        : []
+
+      setMessages(entries)
+      setCanvasText(entries.filter((entry) => entry.role === 'assistant').at(-1)?.content ?? '')
+      window.localStorage.setItem(`bag-v1:active-chat:${sessionUser.id}`, conversationId)
+    } catch {
+      // Ignore load errors.
+    }
+  }
+
+  const startNewConversation = async () => {
+    setMessages([])
+    setInput('')
+    setError('')
+    setCanvasText('')
+    setImageUrl('')
+    setImageError('')
+    setActiveToolPanel(null)
+
+    if (!sessionUser?.id) {
+      const nextId = crypto.randomUUID()
+      setChatId(nextId)
+      return
+    }
+
+    try {
+      const response = await fetch(apiUrl('/api/conversations'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chatId: crypto.randomUUID(),
+          title: 'New chat',
+          model,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create a new chat.')
+      }
+
+      const payload = (await response.json()) as { thread?: ConversationThread }
+      const nextId = payload.thread?.id ?? crypto.randomUUID()
+      setChatId(nextId)
+      await syncWorkspace(nextId, [])
+      await loadConversation(nextId)
+    } catch (newChatError) {
+      setError(newChatError instanceof Error ? newChatError.message : 'Failed to create a new chat.')
+    }
+  }
+
   useEffect(() => {
     if (!visibleModelOptions.some((option) => option.id === model)) {
       setModel(visibleModelOptions[0]?.id ?? DEFAULT_MODEL)
@@ -135,7 +274,7 @@ export default function HomePage() {
       return
     }
 
-    const onKeyDown = (event: KeyboardEvent) => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsModelMenuOpen(false)
         setIsToolMenuOpen(false)
@@ -153,6 +292,7 @@ export default function HomePage() {
 
     const bootstrap = async () => {
       setIsSessionLoading(true)
+      setIsWorkspaceLoading(true)
 
       let resolvedSessionUser: SessionUser | null = null
       try {
@@ -172,47 +312,109 @@ export default function HomePage() {
       }
 
       const resolvedUserId = resolvedSessionUser?.id || crypto.randomUUID()
+      const nextChatId = resolvedSessionUser
+        ? window.localStorage.getItem(`bag-v1:active-chat:${resolvedUserId}`) || crypto.randomUUID()
+        : crypto.randomUUID()
 
       if (!cancelled) {
         setUserId(resolvedUserId)
+        setChatId(nextChatId)
         setIsSessionLoading(false)
       }
 
       if (!resolvedSessionUser) {
-        setMessages([])
-        setInput('')
-        setWebSearchEnabled(false)
-        setModel(DEFAULT_MODEL)
-        setImagePrompt('A sleek futuristic AI assistant dashboard')
-        setImageUrl('')
-        setCanvasText('')
-        setActiveToolPanel(null)
-      }
-
-      if (!resolvedSessionUser) {
+        if (!cancelled) {
+          setMessages([])
+          setThreads([])
+          setMemory([])
+          setInput('')
+          setWebSearchEnabled(false)
+          setModel(DEFAULT_MODEL)
+          setImagePrompt('A sleek futuristic AI assistant dashboard')
+          setImageUrl('')
+          setCanvasText('')
+          setActiveToolPanel(null)
+          setIsWorkspaceLoading(false)
+        }
         return
       }
 
       try {
-        const response = await fetch(apiUrl(`/api/history?userId=${encodeURIComponent(resolvedUserId)}`))
-        if (!response.ok) {
-          return
-        }
+        const response = await fetch(apiUrl('/api/conversations'))
+        if (response.ok) {
+          const payload = (await response.json()) as {
+            threads?: ConversationThread[]
+            memory?: MemoryItem[]
+            activeChatId?: string
+          }
 
-        const payload = (await response.json()) as {
-          entries?: Array<{ role: 'user' | 'assistant'; content: string }>
-        }
+          const availableThreads = Array.isArray(payload.threads) ? payload.threads : []
+          const availableMemory = Array.isArray(payload.memory) ? payload.memory : []
+          const resolvedThreadId =
+            availableThreads.some((thread) => thread.id === nextChatId)
+              ? nextChatId
+              : payload.activeChatId || availableThreads[0]?.id || nextChatId
 
-        if (Array.isArray(payload.entries) && payload.entries.length > 0 && !cancelled) {
-          setMessages(
-            payload.entries.map((entry) => ({
-              role: entry.role,
-              content: entry.content,
-            })),
+          if (!cancelled) {
+            setThreads(availableThreads)
+            setMemory(availableMemory)
+            setChatId(resolvedThreadId)
+            window.localStorage.setItem(`bag-v1:active-chat:${resolvedUserId}`, resolvedThreadId)
+          }
+
+          if (availableThreads.length === 0) {
+            const createResponse = await fetch(apiUrl('/api/conversations'), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                chatId: resolvedThreadId,
+                title: 'New chat',
+                model: DEFAULT_MODEL,
+              }),
+            })
+
+            if (createResponse.ok) {
+              const createPayload = (await createResponse.json()) as { thread?: ConversationThread }
+              if (createPayload.thread && !cancelled) {
+                setThreads([createPayload.thread])
+                setChatId(createPayload.thread.id)
+                window.localStorage.setItem(
+                  `bag-v1:active-chat:${resolvedUserId}`,
+                  createPayload.thread.id,
+                )
+              }
+            }
+          }
+
+          const historyResponse = await fetch(
+            apiUrl(`/api/history?chatId=${encodeURIComponent(resolvedThreadId)}`),
           )
+          if (historyResponse.ok) {
+            const historyPayload = (await historyResponse.json()) as {
+              entries?: Array<{ role: 'user' | 'assistant'; content: string }>
+            }
+
+            if (!cancelled) {
+              const entries = Array.isArray(historyPayload.entries)
+                ? historyPayload.entries.map((entry) => ({
+                    role: entry.role,
+                    content: entry.content,
+                  }))
+                : []
+
+              setMessages(entries)
+              setCanvasText(entries.filter((entry) => entry.role === 'assistant').at(-1)?.content ?? '')
+            }
+          }
         }
       } catch {
-        // Ignore history errors.
+        // Ignore workspace errors.
+      } finally {
+        if (!cancelled) {
+          setIsWorkspaceLoading(false)
+        }
       }
     }
 
@@ -306,6 +508,11 @@ export default function HomePage() {
       return
     }
 
+    const activeChatId = chatId || crypto.randomUUID()
+    if (!chatId) {
+      setChatId(activeChatId)
+    }
+
     const outboundAttachments = attachments
     const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: messageText }]
     setMessages(nextMessages)
@@ -325,6 +532,7 @@ export default function HomePage() {
           webSearchEnabled: canUseAdvancedTools && webSearchEnabled,
           userId,
           userEmail: sessionUser?.email ?? '',
+          chatId: activeChatId,
           messages: nextMessages,
           attachments: outboundAttachments,
         }),
@@ -345,6 +553,9 @@ export default function HomePage() {
         }
         if (outboundAttachments.length > 0) {
           clearAttachments()
+        }
+        if (sessionUser?.id) {
+          void syncWorkspace(activeChatId)
         }
         return
       }
@@ -406,6 +617,10 @@ export default function HomePage() {
       if (outboundAttachments.length > 0) {
         clearAttachments()
       }
+
+      if (sessionUser?.id) {
+        void syncWorkspace(activeChatId)
+      }
     } catch (chatError) {
       setIsThinking(false)
       setError(chatError instanceof Error ? chatError.message : 'Something went wrong.')
@@ -418,6 +633,15 @@ export default function HomePage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     await submitChat()
+  }
+
+  const handleComposerKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey) {
+      return
+    }
+
+    event.preventDefault()
+    void submitChat()
   }
 
   const handleAttachmentPick = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -584,6 +808,14 @@ export default function HomePage() {
             <div className="brand-copy">
               <h1>BAG-V1</h1>
             </div>
+            <button
+              className="icon-button sidebar-toggle"
+              type="button"
+              onClick={() => setIsSidebarOpen((current) => !current)}
+              aria-label={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            >
+              <Menu size={16} />
+            </button>
           </div>
 
           <div className="toolbar-left">
@@ -626,7 +858,76 @@ export default function HomePage() {
 
         </header>
 
-        <section className="panel chat-panel workspace-panel">
+        <div className={`workspace-layout ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+          <aside className="panel workspace-sidebar" aria-label="Conversation sidebar">
+            <div className="sidebar-header">
+              <div>
+                <div className="section-title">Chats</div>
+                <p className="section-subtitle">New chat, history, and memory.</p>
+              </div>
+              <button className="button button-primary" type="button" onClick={() => void startNewConversation()}>
+                <Plus size={16} /> New chat
+              </button>
+            </div>
+
+            {sessionUser ? (
+              <>
+                <section className="sidebar-section">
+                  <div className="section-title">History</div>
+                  <div className="sidebar-list">
+                    {isWorkspaceLoading ? (
+                      <div className="locked-panel">
+                        <p className="helper">Loading your conversations...</p>
+                      </div>
+                    ) : threads.length === 0 ? (
+                      <div className="locked-panel">
+                        <p className="helper">No previous chats yet. Start a new one.</p>
+                      </div>
+                    ) : (
+                      threads.map((thread) => {
+                        const active = thread.id === chatId
+                        return (
+                          <button
+                            key={thread.id}
+                            type="button"
+                            className={`sidebar-item ${active ? 'active' : ''}`}
+                            onClick={() => void loadConversation(thread.id)}
+                          >
+                            <strong>{thread.title}</strong>
+                            <small>{thread.lastMessagePreview || 'No preview available.'}</small>
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                </section>
+
+                <section className="sidebar-section">
+                  <div className="section-title">Memory</div>
+                  <div className="sidebar-list">
+                    {memory.length === 0 ? (
+                      <div className="locked-panel">
+                        <p className="helper">No saved memories yet. Chat a bit and we’ll keep useful notes here.</p>
+                      </div>
+                    ) : (
+                      memory.map((item) => (
+                        <div key={item.id} className="sidebar-memory">
+                          <strong>{item.text}</strong>
+                          <small>{new Date(item.createdAt).toLocaleString()}</small>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              </>
+            ) : (
+              <div className="locked-panel">
+                <p className="helper">Sign in to save chat history and memory.</p>
+              </div>
+            )}
+          </aside>
+
+          <section className="panel chat-panel workspace-panel">
           <div className="chat-header">
             <div className="title-row">
               <div>
@@ -895,6 +1196,7 @@ export default function HomePage() {
                 className="textarea"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
                 placeholder="Ask Bag-v1 anything..."
                 rows={5}
               />
@@ -1012,7 +1314,8 @@ export default function HomePage() {
               ) : null}
             </div>
           ) : null}
-        </section>
+          </section>
+        </div>
       </div>
     </main>
   )
