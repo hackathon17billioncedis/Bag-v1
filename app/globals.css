@@ -2143,7 +2143,13 @@ body {
   }
 
   .chat-panel {
+    grid-template-rows: auto auto auto;
     min-height: auto;
+    overflow: visible;
+  }
+
+  .messages {
+    overflow: visible;
   }
 
   .messages,
@@ -2175,6 +2181,11 @@ body {
     gap: 0.8rem;
   }
 
+  .chat-panel {
+    grid-template-rows: auto auto auto;
+    overflow: visible;
+  }
+
   .chat-header,
   .messages,
   .composer {
@@ -2189,6 +2200,7 @@ body {
 
   .messages {
     padding-top: 1rem;
+    overflow: visible;
   }
 
   .empty-state {
@@ -2277,6 +2289,11 @@ body {
     padding: 0.7rem;
   }
 
+  .chat-panel {
+    grid-template-rows: auto auto auto;
+    overflow: visible;
+  }
+
   .chat-header,
   .messages,
   .composer {
@@ -2295,6 +2312,10 @@ body {
 
   .quick-prompts-inline .chip {
     flex-basis: 100%;
+  }
+
+  .messages {
+    overflow: visible;
   }
 
   .composer-send-stack .button.button-primary {
