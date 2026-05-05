@@ -8,12 +8,15 @@ import {
   Download,
   Check,
   ChevronDown,
+  LoaderCircle,
   Mic,
   MicOff,
   Paperclip,
+  Plus,
   Play,
   RefreshCcw,
   Lock,
+  Search,
   Sparkles,
   Volume2,
   X,
@@ -90,6 +93,8 @@ export default function HomePage() {
   const [speechRate, setSpeechRate] = useState(1.02)
   const [error, setError] = useState('')
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [isThinking, setIsThinking] = useState(false)
 
   const [imagePrompt, setImagePrompt] = useState('A sleek futuristic AI assistant dashboard')
   const [imageUrl, setImageUrl] = useState('')
@@ -97,10 +102,14 @@ export default function HomePage() {
   const [imageError, setImageError] = useState('')
   const [attachments, setAttachments] = useState<UploadedFile[]>([])
   const [canvasText, setCanvasText] = useState('')
+  const [isToolMenuOpen, setIsToolMenuOpen] = useState(false)
+  const [isSpeakerMenuOpen, setIsSpeakerMenuOpen] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const recognitionRef = useRef<VoiceRecognition | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const canvasRef = useRef<HTMLTextAreaElement | null>(null)
+  const imageRef = useRef<HTMLTextAreaElement | null>(null)
 
   const currentModel = useMemo(() => getModelOption(model), [model])
   const modelOptions = useMemo(() => getModelOptions(), [])
@@ -150,6 +159,22 @@ export default function HomePage() {
   }, [isModelMenuOpen])
 
   useEffect(() => {
+    if (!isToolMenuOpen && !isSpeakerMenuOpen) {
+      return
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsToolMenuOpen(false)
+        setIsSpeakerMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isToolMenuOpen, isSpeakerMenuOpen])
+
+  useEffect(() => {
     let cancelled = false
 
     const bootstrap = async () => {
@@ -183,12 +208,19 @@ export default function HomePage() {
       try {
         const stored = window.localStorage.getItem(STORAGE_KEY)
         if (stored) {
-          const parsed = JSON.parse(stored) as { messages?: ChatMessage[]; model?: string }
+          const parsed = JSON.parse(stored) as {
+            messages?: ChatMessage[]
+            model?: string
+            webSearchEnabled?: boolean
+          }
           if (Array.isArray(parsed.messages) && !cancelled) {
             setMessages(parsed.messages)
           }
           if (parsed.model && !cancelled) {
             setModel(parsed.model)
+          }
+          if (typeof parsed.webSearchEnabled === 'boolean' && !cancelled && resolvedSessionUser) {
+            setWebSearchEnabled(parsed.webSearchEnabled)
           }
         }
 
@@ -229,6 +261,10 @@ export default function HomePage() {
         // Ignore storage errors and fall back to a clean session.
       }
 
+      if (!resolvedSessionUser) {
+        setWebSearchEnabled(false)
+      }
+
       try {
         const response = await fetch(apiUrl(`/api/history?userId=${encodeURIComponent(resolvedUserId)}`))
         if (!response.ok) {
@@ -261,9 +297,18 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages, model }))
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ messages, model, webSearchEnabled }),
+    )
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, model])
+  }, [messages, model, webSearchEnabled])
+
+  useEffect(() => {
+    if (!canUseAdvancedTools && webSearchEnabled) {
+      setWebSearchEnabled(false)
+    }
+  }, [canUseAdvancedTools, webSearchEnabled])
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -380,6 +425,7 @@ export default function HomePage() {
     setInput('')
     setError('')
     setIsSending(true)
+    setIsThinking(true)
 
     try {
       const response = await fetch(apiUrl('/api/chat'), {
@@ -389,6 +435,7 @@ export default function HomePage() {
         },
         body: JSON.stringify({
           model,
+          webSearchEnabled: canUseAdvancedTools && webSearchEnabled,
           userId,
           userEmail: sessionUser?.email ?? '',
           messages: nextMessages,
@@ -404,6 +451,7 @@ export default function HomePage() {
       if (!response.body) {
         const payload = (await response.json().catch(() => ({}))) as { reply?: string }
         const reply = payload.reply ?? ''
+        setIsThinking(false)
         if (reply) {
           setMessages((current) => [...current, { role: 'assistant', content: reply }])
           setCanvasText(reply)
@@ -420,6 +468,7 @@ export default function HomePage() {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let assistantText = ''
+      let hasFirstChunk = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -428,6 +477,10 @@ export default function HomePage() {
         }
 
         assistantText += decoder.decode(value, { stream: true })
+        if (!hasFirstChunk) {
+          hasFirstChunk = true
+          setIsThinking(false)
+        }
         setMessages((current) =>
           current.map((message, index) => {
             if (index !== current.length - 1 || message.role !== 'assistant') {
@@ -444,6 +497,7 @@ export default function HomePage() {
 
       assistantText += decoder.decode()
       const finalReply = assistantText.trim()
+      setIsThinking(false)
       setMessages((current) =>
         current.map((message, index) => {
           if (index !== current.length - 1 || message.role !== 'assistant') {
@@ -466,8 +520,10 @@ export default function HomePage() {
         clearAttachments()
       }
     } catch (chatError) {
+      setIsThinking(false)
       setError(chatError instanceof Error ? chatError.message : 'Something went wrong.')
     } finally {
+      setIsThinking(false)
       setIsSending(false)
     }
   }
@@ -481,6 +537,7 @@ export default function HomePage() {
     setMessages([])
     setInput('')
     setError('')
+    setIsThinking(false)
     window.localStorage.removeItem(STORAGE_KEY)
     window.speechSynthesis.cancel()
   }
@@ -654,7 +711,7 @@ export default function HomePage() {
               <h1>BAG-V1</h1>
             </div>
           </div>
-          <div className="toolbar-right">
+            <div className="toolbar-right">
             {sessionUser ? (
               <button
                 className="button button-ghost"
@@ -765,15 +822,16 @@ export default function HomePage() {
                   ) : null}
                 </div>
               ) : (
-                <div className="model-switcher locked-model">
-                  <div className="model-switcher-trigger model-switcher-locked">
+                <div className="locked-model-space">
+                  <button className="model-switcher-trigger model-switcher-locked model-switcher-compact" type="button" disabled>
                     <div className="model-switcher-copy">
-                      <span className="model-switcher-label">Current model</span>
+                      <span className="model-switcher-label">Model</span>
                       <strong>Llama 3.1 8B</strong>
-                      <span>Default guest model</span>
+                      <span>Locked until sign in</span>
                     </div>
                     <Lock size={16} />
-                  </div>
+                  </button>
+                  <p className="helper locked-model-note">Sign in to change models and unlock image generation.</p>
                 </div>
               )}
             </div>
@@ -800,33 +858,186 @@ export default function HomePage() {
             <div className="chat-header">
               <div className="title-row">
                 <div>
-                  <div className="section-title">Chat workspace</div>
-                  <p className="section-subtitle">{currentModel.label}</p>
+                <div className="section-title">Chat workspace</div>
+                  <p className="section-subtitle">
+                    {currentModel.label}
+                    {canUseAdvancedTools && webSearchEnabled ? ' · Web search on' : ''}
+                  </p>
                 </div>
                 <div className="user-chip">
                   <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest mode')}</span>
                 </div>
               </div>
 
-              <div className="toolbar">
-                <div className="toolbar-left">
+            </div>
+
+            <div className="messages">
+              {messages.length === 0 ? (
+                <div className="empty-state">
+                  <h2>How can I help?</h2>
+                  <p>Ask a question, upload a file, or start from the sidebar.</p>
+                </div>
+              ) : null}
+
+              {isThinking ? (
+                <div className="thinking-indicator" aria-live="polite">
+                  <LoaderCircle size={16} className="spin" />
+                  <span>Thinking with {currentModel.label}...</span>
+                </div>
+              ) : null}
+
+              {messages.map((message, index) => (
+                <article key={`${message.role}-${index}`} className={`message ${message.role}`}>
+                  <div className="message-meta">{message.role === 'user' ? 'You' : APP_NAME}</div>
+                  <div className="bubble">{message.content}</div>
+                </article>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <form className="composer" onSubmit={handleSubmit}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="sr-only"
+                multiple
+                onChange={handleAttachmentPick}
+              />
+
+              <div className="composer-toolbar">
+                <div className="composer-toolbar-left">
                   <button
-                    className="button button-ghost"
+                    className="icon-button"
+                    type="button"
+                    onClick={() => {
+                      setIsToolMenuOpen((current) => !current)
+                      setIsSpeakerMenuOpen(false)
+                    }}
+                    aria-label="Open tools"
+                    aria-expanded={isToolMenuOpen}
+                  >
+                    <Plus size={16} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={() => {
+                      setIsSpeakerMenuOpen((current) => !current)
+                      setIsToolMenuOpen(false)
+                    }}
+                    aria-label="Open speaker controls"
+                    aria-expanded={isSpeakerMenuOpen}
+                  >
+                    <Volume2 size={16} />
+                  </button>
+                  <button
+                    className="button button-ghost composer-quick-action"
+                    type="button"
+                    onClick={openFilePicker}
+                  >
+                    <Paperclip size={16} /> Upload file
+                  </button>
+                </div>
+                <div className="composer-toolbar-right">
+                  <button
+                    className="button button-ghost composer-quick-action"
                     type="button"
                     onClick={() => speak(messages.at(-1)?.content ?? 'Voice is ready.')}
                     disabled={!voiceEnabled || messages.length === 0}
                   >
-                    <Volume2 size={16} /> Read last reply
+                    <Play size={16} /> Read
                   </button>
                 </div>
-                <div className="toolbar-right">
+              </div>
+
+                {isToolMenuOpen ? (
+                  <div className="tools-popover">
+                  <button
+                    className="tools-popover-item"
+                    type="button"
+                    onClick={() => {
+                      if (!canUseAdvancedTools) {
+                        setIsToolMenuOpen(false)
+                        return
+                      }
+                      setWebSearchEnabled((current) => !current)
+                      setIsToolMenuOpen(false)
+                    }}
+                    disabled={!canUseAdvancedTools}
+                  >
+                    <Search size={16} />
+                    <span>
+                      <strong>Web search</strong>
+                      <small>
+                        {canUseAdvancedTools
+                          ? webSearchEnabled
+                            ? 'Search the live web for this chat'
+                            : 'Ground current answers with the web'
+                          : 'Sign in to unlock live search'}
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    className="tools-popover-item"
+                    type="button"
+                    onClick={() => {
+                      setIsToolMenuOpen(false)
+                      canvasRef.current?.focus()
+                      canvasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    }}
+                  >
+                    <Copy size={16} />
+                    <span>
+                      <strong>Canvas</strong>
+                      <small>Edit, copy, export</small>
+                    </span>
+                  </button>
+                  <button
+                    className="tools-popover-item"
+                    type="button"
+                    onClick={() => {
+                      if (!canUseAdvancedTools) {
+                        setIsToolMenuOpen(false)
+                        return
+                      }
+                      setIsToolMenuOpen(false)
+                      imageRef.current?.focus()
+                      imageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    }}
+                    disabled={!canUseAdvancedTools}
+                  >
+                    <Sparkles size={16} />
+                    <span>
+                      <strong>Image generation</strong>
+                      <small>{canUseAdvancedTools ? 'Create visuals from a prompt' : 'Sign in to unlock image generation'}</small>
+                    </span>
+                  </button>
+                  <button
+                    className="tools-popover-item"
+                    type="button"
+                    onClick={() => {
+                      setIsToolMenuOpen(false)
+                      openFilePicker()
+                    }}
+                  >
+                    <Paperclip size={16} />
+                    <span>
+                      <strong>Upload file</strong>
+                      <small>Attach files to chat</small>
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+
+              {isSpeakerMenuOpen ? (
+                <div className="speaker-panel">
                   <label className="toggle">
                     <input
                       type="checkbox"
                       checked={voiceEnabled}
                       onChange={(event) => setVoiceEnabled(event.target.checked)}
                     />
-                    Voice output
+                    Speaker
                   </label>
                   <select
                     className="control"
@@ -857,34 +1068,7 @@ export default function HomePage() {
                     />
                   </label>
                 </div>
-              </div>
-            </div>
-
-            <div className="messages">
-              {messages.length === 0 ? (
-                <div className="empty-state">
-                  <h2>How can I help?</h2>
-                  <p>Ask a question, upload a file, or start from the sidebar.</p>
-                </div>
               ) : null}
-
-              {messages.map((message, index) => (
-                <article key={`${message.role}-${index}`} className={`message ${message.role}`}>
-                  <div className="message-meta">{message.role === 'user' ? 'You' : APP_NAME}</div>
-                  <div className="bubble">{message.content}</div>
-                </article>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-
-            <form className="composer" onSubmit={handleSubmit}>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="sr-only"
-                multiple
-                onChange={handleAttachmentPick}
-              />
 
               {attachments.length > 0 ? (
                 <div className="attachment-strip">
@@ -947,9 +1131,9 @@ export default function HomePage() {
           <aside className="panel tools-panel">
             <div className="sidebar-card">
               <div className="section-title">Canvas</div>
-              <p className="section-subtitle">Draft</p>
 
               <textarea
+                ref={canvasRef}
                 className="textarea canvas-textarea"
                 value={canvasText}
                 onChange={(event) => setCanvasText(event.target.value)}
@@ -978,13 +1162,11 @@ export default function HomePage() {
 
             <div className="sidebar-card">
               <div className="section-title">Image generation</div>
-              <p className="section-subtitle">
-                {canUseAdvancedTools ? 'Ready' : 'Locked'}
-              </p>
 
               {canUseAdvancedTools ? (
                 <>
                   <textarea
+                    ref={imageRef}
                     className="textarea"
                     value={imagePrompt}
                     onChange={(event) => setImagePrompt(event.target.value)}

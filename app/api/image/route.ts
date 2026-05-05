@@ -9,7 +9,7 @@ type ImageRequest = {
   userEmail?: string
 }
 
-const OPENROUTER_IMAGE_URL = 'https://openrouter.ai/api/v1/images/generations'
+const OPENROUTER_IMAGE_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 export async function POST(request: Request) {
   const apiKey = process.env.OPENROUTER_API_KEY
@@ -52,9 +52,14 @@ export async function POST(request: Request) {
     },
     body: JSON.stringify({
       model: IMAGE_MODEL,
-      prompt,
-      n: 1,
-      size: '1024x1024',
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      modalities: ['image'],
+      stream: false,
     }),
   })
 
@@ -70,10 +75,23 @@ export async function POST(request: Request) {
   }
 
   const result = (await response.json()) as {
+    choices?: Array<{
+      message?: {
+        images?: Array<{
+          image_url?: {
+            url?: string
+          }
+        }>
+        content?: string
+      }
+    }>
     data?: Array<{ url?: string }>
   }
 
-  const imageUrl = result.data?.[0]?.url
+  const imageUrl =
+    result.choices?.[0]?.message?.images?.[0]?.image_url?.url ??
+    result.data?.[0]?.url ??
+    ''
   if (!imageUrl) {
     return NextResponse.json(
       { error: 'The model did not return an image URL.' },

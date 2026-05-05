@@ -15,8 +15,25 @@ const CHAT_COUNT_KEY = 'bag-v1:stats:chat_count'
 const IMAGE_COUNT_KEY = 'bag-v1:stats:image_count'
 const MODEL_COUNTS_KEY = 'bag-v1:stats:model_counts'
 
+function isPlaceholderStorageValue(value: string | undefined) {
+  if (!value) {
+    return true
+  }
+
+  const normalized = value.trim().toLowerCase()
+  return (
+    normalized.length === 0 ||
+    normalized.includes('your-kv') ||
+    normalized.includes('placeholder') ||
+    normalized.includes('replace-me')
+  )
+}
+
 async function getKvClient() {
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+  if (
+    isPlaceholderStorageValue(process.env.KV_REST_API_URL) ||
+    isPlaceholderStorageValue(process.env.KV_REST_API_TOKEN)
+  ) {
     return null
   }
 
@@ -60,21 +77,25 @@ function safeParseEntries(raw: unknown): ChatEntry[] {
 }
 
 export async function appendConversationEntry(userId: string, entry: ChatEntry) {
-  const kv = await getKvClient()
-  if (!kv) {
+  try {
+    const kv = await getKvClient()
+    if (!kv) {
+      return { storageAvailable: false }
+    }
+
+    const key = chatKey(userId)
+    const current = safeParseEntries(await kv.get<ChatEntry[]>(key))
+    const next = [...current, entry].slice(-50)
+
+    await kv.set(key, next)
+    await kv.sadd(USER_SET_KEY, userId)
+    await kv.incr(CHAT_COUNT_KEY)
+    await kv.hincrby(MODEL_COUNTS_KEY, entry.model, 1)
+
+    return { storageAvailable: true }
+  } catch {
     return { storageAvailable: false }
   }
-
-  const key = chatKey(userId)
-  const current = safeParseEntries(await kv.get<ChatEntry[]>(key))
-  const next = [...current, entry].slice(-50)
-
-  await kv.set(key, next)
-  await kv.sadd(USER_SET_KEY, userId)
-  await kv.incr(CHAT_COUNT_KEY)
-  await kv.hincrby(MODEL_COUNTS_KEY, entry.model, 1)
-
-  return { storageAvailable: true }
 }
 
 export async function appendImagePrompt(
@@ -83,34 +104,45 @@ export async function appendImagePrompt(
   model: string,
   userEmail?: string,
 ) {
-  const kv = await getKvClient()
-  if (!kv) {
+  try {
+    const kv = await getKvClient()
+    if (!kv) {
+      return { storageAvailable: false }
+    }
+
+    await kv.sadd(USER_SET_KEY, userId)
+    await kv.incr(IMAGE_COUNT_KEY)
+    await kv.hincrby(MODEL_COUNTS_KEY, model, 1)
+    await kv.lpush(
+      `bag-v1:user:${userId}:images`,
+      JSON.stringify({
+        prompt,
+        model,
+        userEmail,
+        timestamp: new Date().toISOString(),
+      }),
+    )
+    await kv.ltrim(`bag-v1:user:${userId}:images`, 0, 49)
+
+    return { storageAvailable: true }
+  } catch {
     return { storageAvailable: false }
   }
-
-  await kv.sadd(USER_SET_KEY, userId)
-  await kv.incr(IMAGE_COUNT_KEY)
-  await kv.hincrby(MODEL_COUNTS_KEY, model, 1)
-  await kv.lpush(`bag-v1:user:${userId}:images`, JSON.stringify({
-    prompt,
-    model,
-    userEmail,
-    timestamp: new Date().toISOString(),
-  }))
-  await kv.ltrim(`bag-v1:user:${userId}:images`, 0, 49)
-
-  return { storageAvailable: true }
 }
 
 export async function getConversationHistory(userId: string) {
-  const kv = await getKvClient()
-  if (!kv) {
+  try {
+    const kv = await getKvClient()
+    if (!kv) {
+      return { storageAvailable: false, entries: [] as ChatEntry[] }
+    }
+
+    const raw = await kv.get<ChatEntry[]>(chatKey(userId))
+    const entries = safeParseEntries(raw)
+    return { storageAvailable: true, entries }
+  } catch {
     return { storageAvailable: false, entries: [] as ChatEntry[] }
   }
-
-  const raw = await kv.get<ChatEntry[]>(chatKey(userId))
-  const entries = safeParseEntries(raw)
-  return { storageAvailable: true, entries }
 }
 
 export type AdminOverview = {
@@ -130,8 +162,58 @@ export type AdminOverview = {
 }
 
 export async function getAdminOverview() : Promise<AdminOverview> {
-  const kv = await getKvClient()
-  if (!kv) {
+  try {
+    const kv = await getKvClient()
+    if (!kv) {
+      return {
+        storageAvailable: false,
+        stats: {
+          chatCount: 0,
+          imageCount: 0,
+          userCount: 0,
+          modelCounts: {},
+        },
+        users: [],
+      }
+    }
+
+    const [chatCountRaw, imageCountRaw, modelCountsRaw, userIds] = await Promise.all([
+      kv.get<number>(CHAT_COUNT_KEY),
+      kv.get<number>(IMAGE_COUNT_KEY),
+      kv.hgetall<Record<string, number>>(MODEL_COUNTS_KEY),
+      kv.smembers(USER_SET_KEY),
+    ])
+
+    const users = await Promise.all(
+      (userIds as string[]).map(async (userId) => {
+        const history = safeParseEntries(await kv.lrange(chatKey(userId), 0, 49))
+        const last = history.at(-1) ?? null
+        return {
+          userId,
+          messageCount: history.length,
+          lastActivityAt: last?.timestamp ?? null,
+          lastModel: last?.model ?? null,
+        }
+      }),
+    )
+
+    users.sort((left, right) => {
+      const leftTime = left.lastActivityAt ? Date.parse(left.lastActivityAt) : 0
+      const rightTime = right.lastActivityAt ? Date.parse(right.lastActivityAt) : 0
+      return rightTime - leftTime
+    })
+
+    return {
+      storageAvailable: true,
+      stats: {
+        chatCount: Number(chatCountRaw ?? 0),
+        imageCount: Number(imageCountRaw ?? 0),
+        userCount: userIds.length,
+        modelCounts: modelCountsRaw ?? {},
+      },
+      users,
+    }
+  } catch {
     return {
       storageAvailable: false,
       stats: {
@@ -142,42 +224,5 @@ export async function getAdminOverview() : Promise<AdminOverview> {
       },
       users: [],
     }
-  }
-
-  const [chatCountRaw, imageCountRaw, modelCountsRaw, userIds] = await Promise.all([
-    kv.get<number>(CHAT_COUNT_KEY),
-    kv.get<number>(IMAGE_COUNT_KEY),
-    kv.hgetall<Record<string, number>>(MODEL_COUNTS_KEY),
-    kv.smembers(USER_SET_KEY),
-  ])
-
-  const users = await Promise.all(
-    (userIds as string[]).map(async (userId) => {
-      const history = safeParseEntries(await kv.lrange(chatKey(userId), 0, 49))
-      const last = history.at(-1) ?? null
-      return {
-        userId,
-        messageCount: history.length,
-        lastActivityAt: last?.timestamp ?? null,
-        lastModel: last?.model ?? null,
-      }
-    }),
-  )
-
-  users.sort((left, right) => {
-    const leftTime = left.lastActivityAt ? Date.parse(left.lastActivityAt) : 0
-    const rightTime = right.lastActivityAt ? Date.parse(right.lastActivityAt) : 0
-    return rightTime - leftTime
-  })
-
-  return {
-    storageAvailable: true,
-    stats: {
-      chatCount: Number(chatCountRaw ?? 0),
-      imageCount: Number(imageCountRaw ?? 0),
-      userCount: userIds.length,
-      modelCounts: modelCountsRaw ?? {},
-    },
-    users,
   }
 }

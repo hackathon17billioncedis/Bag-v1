@@ -12,6 +12,7 @@ type ChatRequest = {
   message?: string
   messages?: ChatMessage[]
   model?: string
+  webSearchEnabled?: boolean
   userId?: string
   userEmail?: string
   attachments?: Array<{
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
   const userId = sessionUser?.id?.trim() || body.userId?.trim() || 'anonymous'
   const userEmail = sessionUser?.email?.trim() || body.userEmail?.trim() || ''
   const model = resolveModel(body.model, Boolean(sessionUser))
+  const webSearchEnabled = Boolean(sessionUser) && body.webSearchEnabled === true
   const attachmentsBlock = buildAttachmentBlock(body.attachments)
   const messages = sanitizeMessages(body.messages, body.message ?? '')
 
@@ -117,9 +119,22 @@ export async function POST(request: Request) {
 
   const payload = {
     model,
-    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...contextualMessages],
+    messages: [
+      {
+        role: 'system',
+        content: webSearchEnabled
+          ? `${SYSTEM_PROMPT}\nUse web search when the user asks for current, recent, local, or fact-sensitive information. Keep the answer grounded, concise, and cite useful sources naturally.`
+          : SYSTEM_PROMPT,
+      },
+      ...contextualMessages,
+    ],
     temperature: 0.7,
     max_tokens: 1200,
+    ...(webSearchEnabled
+      ? {
+          tools: [{ type: 'openrouter:web_search' }],
+        }
+      : {}),
   }
 
   const response = await fetch(OPENROUTER_URL, {
