@@ -3,7 +3,6 @@ import { AUTH_COOKIE_NAME, createSessionToken, validateOTP } from '@/lib/auth'
 
 type VerifyOTPRequest = {
   email?: string
-  username?: string
   otp?: string
 }
 
@@ -17,23 +16,23 @@ export async function POST(request: Request) {
   }
 
   const email = body.email?.trim() ?? ''
-  const username = body.username?.trim() ?? ''
   const otp = body.otp?.trim() ?? ''
 
-  if (!email || !username || !otp) {
-    return NextResponse.json({ error: 'Username, email, and OTP are required.' }, { status: 400 })
+  if (!email || !otp) {
+    return NextResponse.json({ error: 'Email and OTP are required.' }, { status: 400 })
   }
 
-  const isValid = validateOTP(email, otp, username)
+  const isValid = validateOTP(email, otp)
   if (!isValid) {
     return NextResponse.json({ error: 'Invalid or expired OTP.' }, { status: 401 })
   }
 
   try {
+    const name = email.split('@')[0] || email
     const user = {
       id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
       email,
-      name: username,
+      name,
       picture: null,
     }
 

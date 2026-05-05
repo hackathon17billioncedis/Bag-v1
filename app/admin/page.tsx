@@ -125,7 +125,7 @@ export default function AdminPage() {
             <form className="panel admin-login-card" onSubmit={handleSubmit}>
               <div>
                 <div className="section-title">Admin access</div>
-                <p className="section-subtitle">Use the allowlisted email and username.</p>
+                <p className="section-subtitle">Use the allowlisted email address.</p>
               </div>
               <EmailOTPAuth
                 className="auth-button-wrap"

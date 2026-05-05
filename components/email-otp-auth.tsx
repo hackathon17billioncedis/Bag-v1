@@ -12,7 +12,6 @@ type Props = {
 
 export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props) {
   const [step, setStep] = useState<'details' | 'otp'>('details')
-  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
@@ -34,13 +33,7 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
   const sendOtp = async () => {
-    const nextUsername = username.trim()
     const nextEmail = email.trim()
-
-    if (nextUsername.length < 2) {
-      setError('Please enter a username.')
-      return
-    }
 
     if (!emailRegex.test(nextEmail)) {
       setError('Please enter a valid email address.')
@@ -56,7 +49,7 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username: nextUsername, email: nextEmail }),
+        body: JSON.stringify({ email: nextEmail }),
       })
 
       const result = (await response.json().catch(() => ({}))) as { error?: string }
@@ -74,7 +67,6 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
   }
 
   const verifyOtp = async () => {
-    const nextUsername = username.trim()
     const nextEmail = email.trim()
     const nextOtp = otp.trim()
 
@@ -97,7 +89,7 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username: nextUsername, email: nextEmail, otp: nextOtp }),
+        body: JSON.stringify({ email: nextEmail, otp: nextOtp }),
       })
 
       const result = (await response.json().catch(() => ({}))) as { error?: string; user?: SessionUser }
@@ -128,17 +120,9 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
       {step === 'details' ? (
         <div className="email-input-section">
           <h3>Sign in or sign up</h3>
-          <p className="meta-row">Enter a username and email to receive a one-time code.</p>
+          <p className="meta-row">Enter your email to receive a one-time code.</p>
 
           <div className="input-stack">
-            <input
-              type="text"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder="Username"
-              className="control"
-              disabled={loading}
-            />
             <input
               type="email"
               value={email}
@@ -151,7 +135,7 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
               className="button button-primary"
               type="button"
               onClick={sendOtp}
-              disabled={loading || username.trim().length < 2 || !email}
+              disabled={loading || !email}
               style={fullWidth ? { width: '100%' } : undefined}
             >
               {loading ? 'Sending...' : 'Send code'}

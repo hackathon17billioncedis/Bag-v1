@@ -8,7 +8,7 @@ A Next.js and TypeScript upgrade of the Bag-v1 assistant for Vercel, now with SM
 - Moved chat and image generation into Vercel route handlers
 - Swapped Python voice tooling for browser speech recognition and speech synthesis
 - Kept the OpenRouter-powered assistant flow and image generation
-- Upgraded to a secure username + email OTP authentication system backed by SMTP
+- Upgraded to a secure email OTP authentication system backed by SMTP
 - Added a compact admin dashboard
 
 ## Stack
@@ -26,7 +26,7 @@ A Next.js and TypeScript upgrade of the Bag-v1 assistant for Vercel, now with SM
 - Free browser text-to-speech with selectable voices
 - Persistent per-user chat history when Vercel KV is configured
 - Admin dashboard for usage stats and user activity, gated by `ADMIN_EMAIL`
-- Secure username + email OTP-based authentication system
+- Secure email OTP-based authentication system
 - Vercel-ready deployment structure
 
 ## Environment variables
@@ -82,5 +82,5 @@ Vercel will detect the Next.js app automatically.
 - Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` from your mail provider
 - Set `AUTH_SECRET` to a long random string so the app can sign its session cookie
 - Set `NEXT_PUBLIC_API_BASE_URL` if you want the client to call an external API origin instead of the current site
-- Username and email are collected together before the one-time code is sent, so sign-in and sign-up use the same flow
+- Email is collected before the one-time code is sent, so sign-in and sign-up use the same flow
 - Voice features only work in browsers that support the Web Speech APIs

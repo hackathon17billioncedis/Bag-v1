@@ -4,7 +4,6 @@ import { generateOTP, hashOTP, storeOTP } from '@/lib/auth'
 
 type SendOTPRequest = {
   email?: string
-  username?: string
 }
 
 function getSmtpConfig() {
@@ -40,14 +39,9 @@ export async function POST(request: Request) {
   }
 
   const email = body.email?.trim() ?? ''
-  const username = body.username?.trim() ?? ''
 
   if (!email) {
     return NextResponse.json({ error: 'Email is required.' }, { status: 400 })
-  }
-
-  if (!username) {
-    return NextResponse.json({ error: 'Username is required.' }, { status: 400 })
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -55,14 +49,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid email format.' }, { status: 400 })
   }
 
-  if (username.length < 2) {
-    return NextResponse.json({ error: 'Username must be at least 2 characters long.' }, { status: 400 })
-  }
-
   try {
     const otp = generateOTP()
     const hashedOtp = hashOTP(otp)
-    storeOTP(email, hashedOtp, username)
+    storeOTP(email, hashedOtp)
 
     const smtp = getSmtpConfig()
     const transporter = nodemailer.createTransport({
@@ -78,7 +68,7 @@ export async function POST(request: Request) {
       subject: 'Your Bag-v1 login code',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #0f172a;">
-          <h2 style="margin: 0 0 12px;">Hello ${username},</h2>
+          <h2 style="margin: 0 0 12px;">Hello,</h2>
           <p style="margin: 0 0 16px; line-height: 1.6;">
             Use this one-time code to sign in to Bag-v1.
           </p>

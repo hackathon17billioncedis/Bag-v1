@@ -72,16 +72,15 @@ export function hashOTP(otp: string): string {
   return crypto.createHash('sha256').update(otp).digest('hex')
 }
 
-const otpCache = new Map<string, { hashedOtp: string; expiresAt: Date; username: string }>()
+const otpCache = new Map<string, { hashedOtp: string; expiresAt: Date }>()
 
-export function storeOTP(email: string, hashedOtp: string, username: string): void {
+export function storeOTP(email: string, hashedOtp: string): void {
   const expirationTime = new Date()
   expirationTime.setMinutes(expirationTime.getMinutes() + 10)
   
   otpCache.set(email, {
     hashedOtp,
     expiresAt: expirationTime,
-    username: username.trim(),
   })
   
   setTimeout(() => {
@@ -93,7 +92,7 @@ export function storeOTP(email: string, hashedOtp: string, username: string): vo
   }, 600000)
 }
 
-export function validateOTP(email: string, otp: string, username: string): boolean {
+export function validateOTP(email: string, otp: string): boolean {
   const record = otpCache.get(email)
   
   if (!record) {
@@ -105,7 +104,7 @@ export function validateOTP(email: string, otp: string, username: string): boole
     return false
   }
   
-  const isValid = record.hashedOtp === hashOTP(otp) && record.username === username.trim()
+  const isValid = record.hashedOtp === hashOTP(otp)
   
   if (isValid) {
     otpCache.delete(email)
