@@ -29,6 +29,12 @@
   --shadow: none;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html {
   background: var(--background);
 }
@@ -1629,11 +1635,13 @@ select {
 html,
 body {
   background: var(--background);
+  overflow-x: hidden;
 }
 
 .app-shell {
   min-height: 100vh;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: #0b0d10;
 }
 
@@ -1651,6 +1659,7 @@ body {
 .container {
   width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
   padding: 0;
 }
 
@@ -2033,6 +2042,8 @@ body {
   display: grid;
   gap: 1rem;
   padding: 1rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .workspace-layout {
@@ -2040,6 +2051,9 @@ body {
   grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .workspace-layout.sidebar-closed {
@@ -2056,6 +2070,8 @@ body {
   padding: 1rem;
   position: sticky;
   top: 1rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .sidebar-header {
