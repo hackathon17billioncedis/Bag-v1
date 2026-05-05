@@ -756,6 +756,30 @@ select {
   flex-wrap: wrap;
 }
 
+.header-model-slot {
+  display: flex;
+  justify-content: center;
+  flex: 1 1 240px;
+}
+
+.header-model-switcher {
+  max-width: 280px;
+  width: 100%;
+}
+
+.header-model-trigger {
+  min-height: 44px;
+  padding: 0.65rem 0.8rem;
+}
+
+.header-model-trigger .model-switcher-copy strong {
+  font-size: 0.98rem;
+}
+
+.header-model-trigger .model-switcher-label {
+  font-size: 0.68rem;
+}
+
 .user-chip,
 .status-pill {
   display: inline-flex;
@@ -2026,7 +2050,7 @@ body {
   justify-content: space-between;
   gap: 0.85rem;
   flex-wrap: wrap;
-  margin-top: 0.15rem;
+  margin-top: 0.5rem;
 }
 
 .quick-prompts-inline {

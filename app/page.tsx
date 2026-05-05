@@ -634,6 +634,72 @@ export default function HomePage() {
               <div>
                 <div className="section-title">Chat workspace</div>
               </div>
+              <div className="header-model-slot">
+                {canUseAdvancedTools ? (
+                  <div className="model-switcher model-switcher-inline header-model-switcher">
+                    <button
+                      className="model-switcher-trigger model-switcher-compact header-model-trigger"
+                      type="button"
+                      onClick={() => setIsModelMenuOpen((current) => !current)}
+                      aria-expanded={isModelMenuOpen}
+                      aria-haspopup="menu"
+                    >
+                      <div className="model-switcher-copy">
+                        <span className="model-switcher-label">Model</span>
+                        <strong>{currentModel.label}</strong>
+                      </div>
+                      <ChevronDown size={14} />
+                    </button>
+
+                    {isModelMenuOpen ? (
+                      <div className="model-switcher-menu" role="menu">
+                        {groupedModelOptions.map((group) => (
+                          <div key={group.category} className="model-switcher-group">
+                            <span className="model-switcher-group-label">{group.category}</span>
+                            {group.options.map((option) => {
+                              const active = option.id === model
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={`model-switcher-item ${active ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setModel(option.id)
+                                    setIsModelMenuOpen(false)
+                                  }}
+                                  role="menuitemradio"
+                                  aria-checked={active}
+                                >
+                                  <div>
+                                    <strong>{option.label}</strong>
+                                    <span>{option.bestFor}</span>
+                                  </div>
+                                  {active ? <Check size={16} /> : null}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="locked-model-space header-model-switcher">
+                    <button
+                      className="model-switcher-trigger model-switcher-locked model-switcher-compact header-model-trigger"
+                      type="button"
+                      disabled
+                    >
+                      <div className="model-switcher-copy">
+                        <span className="model-switcher-label">Model</span>
+                        <strong>Llama 3.1 8B</strong>
+                        <span>Locked until sign in</span>
+                      </div>
+                      <Lock size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="user-chip">
                 <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest mode')}</span>
               </div>
@@ -718,71 +784,6 @@ export default function HomePage() {
                 </button>
               ))}
             </div>
-
-            {canUseAdvancedTools ? (
-              <div className="model-switcher model-switcher-inline">
-                <button
-                  className="model-switcher-trigger model-switcher-compact"
-                  type="button"
-                  onClick={() => setIsModelMenuOpen((current) => !current)}
-                  aria-expanded={isModelMenuOpen}
-                  aria-haspopup="menu"
-                >
-                  <div className="model-switcher-copy">
-                    <span className="model-switcher-label">Model</span>
-                    <strong>{currentModel.label}</strong>
-                  </div>
-                  <ChevronDown size={16} />
-                </button>
-
-                {isModelMenuOpen ? (
-                  <div className="model-switcher-menu" role="menu">
-                    {groupedModelOptions.map((group) => (
-                      <div key={group.category} className="model-switcher-group">
-                        <span className="model-switcher-group-label">{group.category}</span>
-                        {group.options.map((option) => {
-                          const active = option.id === model
-                          return (
-                            <button
-                              key={option.id}
-                              type="button"
-                              className={`model-switcher-item ${active ? 'active' : ''}`}
-                              onClick={() => {
-                                setModel(option.id)
-                                setIsModelMenuOpen(false)
-                              }}
-                              role="menuitemradio"
-                              aria-checked={active}
-                            >
-                              <div>
-                                <strong>{option.label}</strong>
-                                <span>{option.bestFor}</span>
-                              </div>
-                              {active ? <Check size={16} /> : null}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="locked-model-space">
-                <button
-                  className="model-switcher-trigger model-switcher-locked model-switcher-compact"
-                  type="button"
-                  disabled
-                >
-                  <div className="model-switcher-copy">
-                    <span className="model-switcher-label">Model</span>
-                    <strong>Llama 3.1 8B</strong>
-                    <span>Locked until sign in</span>
-                  </div>
-                  <Lock size={16} />
-                </button>
-              </div>
-            )}
           </div>
 
           <form className="composer" onSubmit={handleSubmit}>
