@@ -52,7 +52,6 @@ export async function POST(request: Request) {
   try {
     const otp = generateOTP()
     const hashedOtp = hashOTP(otp)
-    storeOTP(email, hashedOtp)
 
     const smtp = getSmtpConfig()
     const transporter = nodemailer.createTransport({
@@ -85,13 +84,22 @@ export async function POST(request: Request) {
       `,
     })
 
+    storeOTP(email, hashedOtp)
+
     return NextResponse.json({ message: 'OTP sent successfully.' })
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to send OTP.'
+    const isAuthError =
+      /535|Username and Password not accepted|Invalid login|EAUTH/i.test(message) ||
+      (error && typeof error === 'object' && 'code' in error && String((error as { code?: string }).code) === 'EAUTH')
+
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Failed to send OTP.',
+        error: isAuthError
+          ? 'SMTP authentication failed. If you are using Gmail, turn on 2-Step Verification and use a Google App Password, not your regular password.'
+          : message,
       },
-      { status: 500 },
+      { status: isAuthError ? 502 : 500 },
     )
   }
 }

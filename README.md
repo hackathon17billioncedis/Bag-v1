@@ -80,6 +80,7 @@ Vercel will detect the Next.js app automatically.
 - Admin access is allowlisted by `ADMIN_EMAIL`
 - `OPENROUTER_DEFAULT_MODEL` sets the starting model, while `OPENROUTER_MODELS` controls which models appear in the board
 - Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` from your mail provider
+- If you use Gmail SMTP, enable 2-Step Verification on that account and use a Google App Password for `SMTP_PASSWORD`
 - Set `AUTH_SECRET` to a long random string so the app can sign its session cookie
 - Set `NEXT_PUBLIC_API_BASE_URL` if you want the client to call an external API origin instead of the current site
 - Email is collected before the one-time code is sent, so sign-in and sign-up use the same flow
