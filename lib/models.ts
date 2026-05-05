@@ -25,7 +25,7 @@ export const DEFAULT_MODEL =
   normalizeModelId(
     process.env.OPENROUTER_DEFAULT_MODEL ??
       process.env.OPENROUTER_MODEL ??
-      'google/gemma-3-4b-it:free',
+      'meta-llama/llama-3.1-8b-instruct',
   )
 export const IMAGE_MODEL = process.env.OPENROUTER_IMAGE_MODEL ?? 'black-forest-labs/flux.2-klein-4b'
 

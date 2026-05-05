@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, RefreshCcw, Shield } from 'lucide-react'
+import { ArrowLeft, BarChart3, Database, ImageIcon, MessageSquare, RefreshCcw, Shield, Users } from 'lucide-react'
 import type { SessionUser } from '@/lib/auth'
 import { apiUrl } from '@/lib/client-config'
 import { EmailOTPAuth } from '@/components/email-otp-auth'
@@ -90,16 +90,14 @@ export default function AdminPage() {
 
   return (
     <main className="app-shell admin-shell">
-      <div className="container">
-        <header className="topbar">
+      <div className="container admin-container">
+        <header className="topbar admin-topbar">
           <div className="brand">
             <div className="brand-mark" aria-hidden="true">
               <Shield />
             </div>
             <div className="brand-copy">
-              <span className="eyebrow">Portal</span>
-              <h1>Bag-v1 admin dashboard</h1>
-              <p>Monitor usage, model mix, and recent activity from one dedicated portal.</p>
+              <h1>Admin</h1>
             </div>
           </div>
           <div className="toolbar-right">
@@ -122,72 +120,55 @@ export default function AdminPage() {
           </div>
         </header>
 
-        <section className="panel hero-card">
-          <span className="eyebrow">Admin access</span>
-          <h2>Open the Bag-v1 portal with the allowlisted admin account.</h2>
-          <p className="helper">
-            This dashboard stays separate from the assistant workspace. Sign in with the admin username and email to load the portal.
-          </p>
-        </section>
-
-        <section className="panel image-panel">
-          <form className="admin-login" onSubmit={handleSubmit}>
-            <div>
-              <div className="section-title">Access</div>
-              <p className="section-subtitle">Sign in with the allowlisted admin email and username to open the dashboard.</p>
-            </div>
-            <div className="admin-toolbar">
-              {sessionUser ? (
-                <button className="button button-primary" type="submit" disabled={status === 'loading'}>
-                  {status === 'loading' ? 'Loading...' : 'Open dashboard'}
-                </button>
-              ) : (
-                <EmailOTPAuth
-                  className="auth-button-wrap"
-                  fullWidth
-                  onSuccess={async (signedInUser) => {
-                    setSessionUser(signedInUser)
-                    await loadOverview()
-                  }}
-                />
-              )}
-            </div>
-            <p className="meta-row">
-              Current user: <code>{sessionUser?.email ?? 'signed out'}</code>
-            </p>
-            <p className="meta-row">
-              Portal scope: <code>usage, models, users, persistence</code>
-            </p>
-            {error ? <div className="error">{error}</div> : null}
-          </form>
-        </section>
+        {!sessionUser ? (
+          <section className="admin-login-shell">
+            <form className="panel admin-login-card" onSubmit={handleSubmit}>
+              <div>
+                <div className="section-title">Admin access</div>
+                <p className="section-subtitle">Use the allowlisted email and username.</p>
+              </div>
+              <EmailOTPAuth
+                className="auth-button-wrap"
+                fullWidth
+                onSuccess={async (signedInUser) => {
+                  setSessionUser(signedInUser)
+                  await loadOverview()
+                }}
+              />
+              {error ? <div className="error">{error}</div> : null}
+            </form>
+          </section>
+        ) : null}
 
         {overview ? (
-          <section className="admin-grid" style={{ marginTop: '1rem' }}>
+          <section className="admin-grid">
             <div className="stats">
               <div className="stat">
+                <MessageSquare size={18} />
                 <strong>{overview.stats.chatCount}</strong>
-                <span>Total chat turns</span>
+                <span>Chat turns</span>
               </div>
               <div className="stat">
+                <ImageIcon size={18} />
                 <strong>{overview.stats.imageCount}</strong>
-                <span>Image generations</span>
+                <span>Images</span>
               </div>
               <div className="stat">
+                <Users size={18} />
                 <strong>{overview.stats.userCount}</strong>
-                <span>Tracked users</span>
+                <span>Users</span>
               </div>
               <div className="stat">
+                <Database size={18} />
                 <strong>{overview.storageAvailable ? 'KV on' : 'KV off'}</strong>
-                <span>Persistence status</span>
+                <span>Persistence</span>
               </div>
             </div>
 
-            <div className="layout" style={{ gridTemplateColumns: 'minmax(0, 0.9fr) minmax(0, 1.1fr)' }}>
-              <section className="panel image-panel">
+            <div className="admin-content-grid">
+              <section className="panel admin-panel">
                 <div>
-                  <div className="section-title">Model usage</div>
-                  <p className="section-subtitle">How the current system is being used across models.</p>
+                  <div className="section-title"><BarChart3 size={16} /> Model usage</div>
                 </div>
                 <div className="quick-prompts">
                   {totalModels.length === 0 ? (
@@ -202,12 +183,11 @@ export default function AdminPage() {
                 </div>
               </section>
 
-              <section className="panel image-panel">
+              <section className="panel admin-panel">
                 <div>
                   <div className="section-title">Users</div>
-                  <p className="section-subtitle">Most recent tracked users and their latest activity.</p>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
+                <div className="admin-table-wrap">
                   <table className="admin-table">
                     <thead>
                       <tr>
@@ -239,6 +219,21 @@ export default function AdminPage() {
                 </div>
               </section>
             </div>
+          </section>
+        ) : null}
+
+        {sessionUser && !overview ? (
+          <section className="admin-login-shell">
+            <form className="panel admin-login-card" onSubmit={handleSubmit}>
+              <div>
+                <div className="section-title">Dashboard</div>
+                <p className="section-subtitle">Signed in as {sessionUser.email}</p>
+              </div>
+              <button className="button button-primary" type="submit" disabled={status === 'loading'}>
+                {status === 'loading' ? 'Loading...' : 'Open dashboard'}
+              </button>
+              {error ? <div className="error">{error}</div> : null}
+            </form>
           </section>
         ) : null}
       </div>

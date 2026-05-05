@@ -53,10 +53,10 @@ type WindowWithSpeech = Window & {
 }
 
 const QUICK_PROMPTS = [
-  'Summarize this app.',
-  'Give me a Vercel launch checklist.',
-  'Help me debug a route handler.',
-  'Write a cleaner product blurb.',
+  'Draft a proposal',
+  'Explain this file',
+  'Write production code',
+  'Summarize notes',
 ]
 
 const STORAGE_KEY = 'bag-v1-chat-state'
@@ -667,18 +667,7 @@ export default function HomePage() {
               >
                 <RefreshCcw size={16} /> Sign out
               </button>
-            ) : (
-              <EmailOTPAuth
-                className="auth-button-wrap"
-                fullWidth={false}
-                onSuccess={async (signedInUser) => {
-                  setSessionUser(signedInUser)
-                  setUserId(signedInUser.id)
-                  window.localStorage.removeItem(USER_ID_KEY)
-                  window.location.reload()
-                }}
-              />
-            )}
+            ) : null}
             <button className="button button-ghost" type="button" onClick={copyTranscript} disabled={messages.length === 0}>
               <Copy size={16} /> Copy chat
             </button>
@@ -699,16 +688,13 @@ export default function HomePage() {
               <div className="user-chip">
                 <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest access')}</span>
               </div>
-              <p className="helper">
-                Guests stay on the default model. Sign in to unlock the rest of the roster and image generation.
-              </p>
             </div>
 
             <div className="sidebar-card">
               <div className="section-title">Access</div>
               {sessionUser ? (
                 <div className="sidebar-actions">
-                  <p className="helper">Your session is active. Model switching and images are unlocked.</p>
+                  <p className="helper">Signed in as {sessionUser.name || sessionUser.email}.</p>
                 </div>
               ) : (
                 <EmailOTPAuth
@@ -726,9 +712,6 @@ export default function HomePage() {
 
             <div className="sidebar-card">
               <div className="section-title">Model</div>
-              <p className="section-subtitle">
-                {canUseAdvancedTools ? 'Tap to switch models.' : 'Locked to the guest model.'}
-              </p>
 
               {canUseAdvancedTools ? (
                 <div className="model-switcher model-switcher-inline">
@@ -818,11 +801,7 @@ export default function HomePage() {
               <div className="title-row">
                 <div>
                   <div className="section-title">Chat workspace</div>
-                  <p className="section-subtitle">
-                    {canUseAdvancedTools
-                      ? 'Private mode is on. Signed-in users can switch models and generate images.'
-                      : 'Guest mode keeps the experience focused and locked to the default model.'}
-                  </p>
+                  <p className="section-subtitle">{currentModel.label}</p>
                 </div>
                 <div className="user-chip">
                   <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest mode')}</span>
@@ -884,8 +863,8 @@ export default function HomePage() {
             <div className="messages">
               {messages.length === 0 ? (
                 <div className="empty-state">
-                  <h2>Start a conversation</h2>
-                  <p>Type a prompt, attach a file, or pick one of the quick starters.</p>
+                  <h2>How can I help?</h2>
+                  <p>Ask a question, upload a file, or start from the sidebar.</p>
                 </div>
               ) : null}
 
@@ -968,7 +947,7 @@ export default function HomePage() {
           <aside className="panel tools-panel">
             <div className="sidebar-card">
               <div className="section-title">Canvas</div>
-              <p className="section-subtitle">Edit the latest answer, then copy or export it cleanly.</p>
+              <p className="section-subtitle">Draft</p>
 
               <textarea
                 className="textarea canvas-textarea"
@@ -1000,7 +979,7 @@ export default function HomePage() {
             <div className="sidebar-card">
               <div className="section-title">Image generation</div>
               <p className="section-subtitle">
-                {canUseAdvancedTools ? 'Generate visuals with the signed-in account.' : 'Sign in to unlock image generation.'}
+                {canUseAdvancedTools ? 'Ready' : 'Locked'}
               </p>
 
               {canUseAdvancedTools ? (
@@ -1032,27 +1011,14 @@ export default function HomePage() {
               ) : (
                 <div className="locked-panel">
                   <p className="helper">
-                    The image model stays hidden until you sign in. That keeps the guest workspace focused on chat.
+                    Sign in to use image generation.
                   </p>
-                  <EmailOTPAuth
-                    className="auth-button-wrap"
-                    fullWidth
-                    onSuccess={async (signedInUser) => {
-                      setSessionUser(signedInUser)
-                      setUserId(signedInUser.id)
-                      window.localStorage.removeItem(USER_ID_KEY)
-                      window.location.reload()
-                    }}
-                  />
                 </div>
               )}
             </div>
           </aside>
         </section>
 
-        <p className="footer-note">
-          OpenRouter chat, file uploads, canvas export, and image generation run from the same Bag-v1 workspace.
-        </p>
       </div>
     </main>
   )
