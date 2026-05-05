@@ -1,45 +1,54 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { apiUrl } from '@/lib/client-config';
-import type { SessionUser } from '@/lib/auth';
+import { useEffect, useState } from 'react'
+import { apiUrl } from '@/lib/client-config'
+import type { SessionUser } from '@/lib/auth'
 
 type Props = {
-  onSuccess: (user: SessionUser) => Promise<void> | void;
-  className?: string;
-  fullWidth?: boolean;
-};
+  onSuccess: (user: SessionUser) => Promise<void> | void
+  className?: string
+  fullWidth?: boolean
+}
 
 export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props) {
-  const [step, setStep] = useState<'email' | 'otp'>('email');
-  const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [countdown, setCountdown] = useState(0);
+  const [step, setStep] = useState<'details' | 'otp'>('details')
+  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [otp, setOtp] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [countdown, setCountdown] = useState(0)
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (countdown > 0) {
-      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [countdown]);
-
-  const handleSendOTP = async () => {
-    if (!email) {
-      setError('Please enter your email address');
-      return;
+    if (countdown <= 0) {
+      return
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError('Please enter a valid email address');
-      return;
+    const timer = window.setTimeout(() => {
+      setCountdown((current) => Math.max(current - 1, 0))
+    }, 1000)
+
+    return () => window.clearTimeout(timer)
+  }, [countdown])
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  const sendOtp = async () => {
+    const nextUsername = username.trim()
+    const nextEmail = email.trim()
+
+    if (nextUsername.length < 2) {
+      setError('Please enter a username.')
+      return
     }
 
-    setLoading(true);
-    setError('');
+    if (!emailRegex.test(nextEmail)) {
+      setError('Please enter a valid email address.')
+      return
+    }
+
+    setLoading(true)
+    setError('')
 
     try {
       const response = await fetch(apiUrl('/api/auth/send-otp'), {
@@ -47,37 +56,40 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email }),
-      });
+        body: JSON.stringify({ username: nextUsername, email: nextEmail }),
+      })
 
-      const result = await response.json();
-
+      const result = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to send OTP');
+        throw new Error(result.error || 'Failed to send OTP.')
       }
 
-      setStep('otp');
-      setCountdown(60); // 60 seconds cooldown
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setStep('otp')
+      setCountdown(60)
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : 'An error occurred.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
-  const handleVerifyOTP = async () => {
-    if (!otp) {
-      setError('Please enter the OTP');
-      return;
+  const verifyOtp = async () => {
+    const nextUsername = username.trim()
+    const nextEmail = email.trim()
+    const nextOtp = otp.trim()
+
+    if (!nextOtp) {
+      setError('Please enter the OTP.')
+      return
     }
 
-    if (otp.length !== 6) {
-      setError('OTP must be 6 digits');
-      return;
+    if (nextOtp.length !== 6) {
+      setError('OTP must be 6 digits.')
+      return
     }
 
-    setLoading(true);
-    setError('');
+    setLoading(true)
+    setError('')
 
     try {
       const response = await fetch(apiUrl('/api/auth/verify-otp'), {
@@ -85,119 +97,111 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, otp }),
-      });
+        body: JSON.stringify({ username: nextUsername, email: nextEmail, otp: nextOtp }),
+      })
 
-      const result = await response.json();
-
+      const result = (await response.json().catch(() => ({}))) as { error?: string; user?: SessionUser }
       if (!response.ok) {
-        throw new Error(result.error || 'Invalid OTP');
+        throw new Error(result.error || 'Invalid OTP.')
       }
 
       if (result.user) {
-        await onSuccess(result.user);
+        await onSuccess(result.user)
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+    } catch (verifyError) {
+      setError(verifyError instanceof Error ? verifyError.message : 'An error occurred.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
-  const handleResendOTP = async () => {
-    if (countdown > 0) return; // Don't allow resending during cooldown
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(apiUrl('/api/auth/send-otp'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to resend OTP');
-      }
-
-      setCountdown(60); // Reset cooldown
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
+  const resendOtp = async () => {
+    if (countdown > 0) {
+      return
     }
-  };
+
+    await sendOtp()
+  }
 
   return (
     <div className={className}>
-      {step === 'email' ? (
+      {step === 'details' ? (
         <div className="email-input-section">
-          <h3>Sign in with Email</h3>
-          <p className="meta-row">Enter your email to receive a one-time password</p>
-          
-          <div className="input-group">
+          <h3>Sign in or sign up</h3>
+          <p className="meta-row">Enter a username and email to receive a one-time code.</p>
+
+          <div className="input-stack">
+            <input
+              type="text"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="Username"
+              className="control"
+              disabled={loading}
+            />
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="your@email.com"
-              className="input-field"
+              className="control"
               disabled={loading}
             />
-            <button 
-              className="button button-primary" 
-              onClick={handleSendOTP} 
-              disabled={loading || !email}
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={sendOtp}
+              disabled={loading || username.trim().length < 2 || !email}
+              style={fullWidth ? { width: '100%' } : undefined}
             >
-              {loading ? 'Sending...' : 'Send OTP'}
+              {loading ? 'Sending...' : 'Send code'}
             </button>
           </div>
         </div>
       ) : (
         <div className="otp-input-section">
-          <h3>Enter OTP</h3>
+          <h3>Enter verification code</h3>
           <p className="meta-row">
-            Enter the 6-digit code sent to <strong>{email}</strong>
+            We sent a 6-digit code to <strong>{email}</strong>
           </p>
-          
-          <div className="input-group">
+
+          <div className="input-stack">
             <input
               type="text"
               value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
               placeholder="6-digit code"
-              className="input-field"
+              className="control"
               maxLength={6}
               disabled={loading}
             />
-            <button 
-              className="button button-primary" 
-              onClick={handleVerifyOTP} 
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={verifyOtp}
               disabled={loading || otp.length !== 6}
+              style={fullWidth ? { width: '100%' } : undefined}
             >
-              {loading ? 'Verifying...' : 'Sign In'}
+              {loading ? 'Verifying...' : 'Continue'}
             </button>
           </div>
-          
+
           <div className="otp-actions">
-            <button 
-              className="resend-button" 
-              onClick={handleResendOTP} 
+            <button
+              className="button button-ghost"
+              type="button"
+              onClick={resendOtp}
               disabled={loading || countdown > 0}
             >
-              {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
+              {countdown > 0 ? `Resend in ${countdown}s` : 'Resend code'}
             </button>
-            
-            <button 
-              className="back-button" 
+
+            <button
+              className="button button-ghost"
+              type="button"
               onClick={() => {
-                setStep('email');
-                setError('');
+                setStep('details')
+                setError('')
               }}
               disabled={loading}
             >
@@ -206,8 +210,8 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
           </div>
         </div>
       )}
-      
-      {error && <div className="error-message">{error}</div>}
+
+      {error ? <div className="error-message">{error}</div> : null}
     </div>
-  );
+  )
 }

@@ -688,92 +688,50 @@ export default function HomePage() {
           </div>
         </header>
 
-        <section className="layout">
-          <aside className="panel panel-hero">
-            <div className="hero-visual" aria-hidden="true" />
-          </aside>
+        <section className="workspace-grid">
+          <aside className="panel sidebar-panel">
+            <div className="sidebar-top">
+              <div className="section-title">Workspace</div>
+              <div className="status-pill">{sessionUser ? 'Signed in' : 'Guest mode'}</div>
+            </div>
 
-          <div className="workspace-stack">
-            <section className="panel chat-panel">
-              <div className="chat-header">
-                <div className="title-row">
-                  <div>
-                    <div className="section-title">Chat workspace</div>
-                    <p className="section-subtitle">
-                      Current model: <strong>{currentModel.label}</strong>
-                    </p>
-                  </div>
-                  <div className="user-chip">
-                    <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest mode')}</span>
-                  </div>
-                </div>
-
-                <div className="toolbar">
-                  <div className="toolbar-left">
-                    <button
-                      className="button button-ghost"
-                      type="button"
-                      onClick={() => speak(messages.at(-1)?.content ?? 'Voice is ready.')}
-                      disabled={!voiceEnabled || messages.length === 0}
-                    >
-                      <Volume2 size={16} /> Read last reply
-                    </button>
-                  </div>
-                  <div className="toolbar-right">
-                    <label className="toggle">
-                      <input
-                        type="checkbox"
-                        checked={voiceEnabled}
-                        onChange={(event) => setVoiceEnabled(event.target.checked)}
-                      />
-                      Voice output
-                    </label>
-                    <select
-                      className="control"
-                      value={selectedVoice}
-                      onChange={(event) => setSelectedVoice(event.target.value)}
-                      aria-label="Select voice"
-                      disabled={availableVoices.length === 0}
-                    >
-                      {availableVoices.length === 0 ? (
-                        <option value="">Loading voices...</option>
-                      ) : (
-                        availableVoices.map((voice) => (
-                          <option key={voice.name} value={voice.name}>
-                            {voice.name} ({voice.lang})
-                          </option>
-                        ))
-                      )}
-                    </select>
-                    <label className="toggle" title="Speech speed">
-                      Speed
-                      <input
-                        type="range"
-                        min="0.8"
-                        max="1.3"
-                        step="0.02"
-                        value={speechRate}
-                        onChange={(event) => setSpeechRate(Number(event.target.value))}
-                      />
-                    </label>
-                  </div>
-                </div>
+            <div className="sidebar-brandline">
+              <div className="user-chip">
+                <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest access')}</span>
               </div>
+              <p className="helper">
+                Guests stay on the default model. Sign in to unlock the rest of the roster and image generation.
+              </p>
+            </div>
 
-              <div className="section-heading-row">
-                <div>
-                  <div className="section-title">Models</div>
-                  <p className="section-subtitle">
-                    {canUseAdvancedTools
-                      ? 'Tap the model pill to switch quickly.'
-                      : 'Guests are locked to Llama 3.1 8B until they sign in.'}
-                  </p>
+            <div className="sidebar-card">
+              <div className="section-title">Access</div>
+              {sessionUser ? (
+                <div className="sidebar-actions">
+                  <p className="helper">Your session is active. Model switching and images are unlocked.</p>
                 </div>
-                <div className="status-pill">{canUseAdvancedTools ? `${modelOptions.length} models` : 'Locked'}</div>
-              </div>
+              ) : (
+                <EmailOTPAuth
+                  className="auth-button-wrap"
+                  fullWidth
+                  onSuccess={async (signedInUser) => {
+                    setSessionUser(signedInUser)
+                    setUserId(signedInUser.id)
+                    window.localStorage.removeItem(USER_ID_KEY)
+                    window.location.reload()
+                  }}
+                />
+              )}
+            </div>
+
+            <div className="sidebar-card">
+              <div className="section-title">Model</div>
+              <p className="section-subtitle">
+                {canUseAdvancedTools ? 'Tap to switch models.' : 'Locked to the guest model.'}
+              </p>
 
               {canUseAdvancedTools ? (
-                <div className="model-switcher">
+                <div className="model-switcher model-switcher-inline">
                   <button
                     className="model-switcher-trigger"
                     type="button"
@@ -782,15 +740,17 @@ export default function HomePage() {
                     aria-haspopup="menu"
                   >
                     <div className="model-switcher-copy">
-                      <span className="model-switcher-label">Model</span>
+                      <span className="model-switcher-label">Current model</span>
                       <strong>{currentModel.label}</strong>
-                      <span>{currentModel.category} · {currentModel.bestFor}</span>
+                      <span>
+                        {currentModel.category} · {currentModel.bestFor}
+                      </span>
                     </div>
                     <ChevronDown size={16} />
                   </button>
 
                   {isModelMenuOpen ? (
-                    <div className="model-switcher-menu" role="menu">
+                    <div className="model-switcher-menu model-switcher-menu-sidebar" role="menu">
                       {groupedModelOptions.map((group) => (
                         <div key={group.category} className="model-switcher-group">
                           <span className="model-switcher-group-label">{group.category}</span>
@@ -825,126 +785,190 @@ export default function HomePage() {
                 <div className="model-switcher locked-model">
                   <div className="model-switcher-trigger model-switcher-locked">
                     <div className="model-switcher-copy">
-                      <span className="model-switcher-label">Model</span>
+                      <span className="model-switcher-label">Current model</span>
                       <strong>Llama 3.1 8B</strong>
                       <span>Default guest model</span>
                     </div>
                     <Lock size={16} />
                   </div>
-                  <div className="locked-cta">
-                    <p>Sign in to unlock the full model list and image generation.</p>
-                    <EmailOTPAuth className="auth-button-wrap" fullWidth onSuccess={async (signedInUser) => {
-                      setSessionUser(signedInUser)
-                      setUserId(signedInUser.id)
-                      window.localStorage.removeItem(USER_ID_KEY)
-                      window.location.reload()
-                    }} />
-                  </div>
                 </div>
               )}
+            </div>
 
-              <div className="messages">
-                {messages.length === 0 ? (
-                  <div className="empty-state">
-                    <h2>Start a conversation</h2>
-                    <p>Type a prompt, attach a file, or tap a quick starter.</p>
-                  </div>
-                ) : null}
-
-                {messages.map((message, index) => (
-                  <article key={`${message.role}-${index}`} className={`message ${message.role}`}>
-                    <div className="message-meta">{message.role === 'user' ? 'You' : APP_NAME}</div>
-                    <div className="bubble">{message.content}</div>
-                  </article>
+            <div className="sidebar-card">
+              <div className="section-title">Quick actions</div>
+              <div className="quick-prompts quick-prompts-compact">
+                {QUICK_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    className="chip"
+                    type="button"
+                    onClick={() => submitChat(prompt)}
+                    disabled={isSending}
+                  >
+                    {prompt}
+                  </button>
                 ))}
-                <div ref={messagesEndRef} />
+              </div>
+            </div>
+          </aside>
+
+          <section className="panel chat-panel">
+            <div className="chat-header">
+              <div className="title-row">
+                <div>
+                  <div className="section-title">Chat workspace</div>
+                  <p className="section-subtitle">
+                    {canUseAdvancedTools
+                      ? 'Private mode is on. Signed-in users can switch models and generate images.'
+                      : 'Guest mode keeps the experience focused and locked to the default model.'}
+                  </p>
+                </div>
+                <div className="user-chip">
+                  <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest mode')}</span>
+                </div>
               </div>
 
-              <form className="composer" onSubmit={handleSubmit}>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="sr-only"
-                  multiple
-                  onChange={handleAttachmentPick}
-                />
-
-                {attachments.length > 0 ? (
-                  <div className="attachment-strip">
-                    {attachments.map((attachment) => (
-                      <span key={attachment.id} className="attachment-chip">
-                        <span>
-                          <strong>{attachment.name}</strong>
-                          <small>{attachment.type || 'file'}</small>
-                        </span>
-                        <button type="button" onClick={() => removeAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`}>
-                          <X size={14} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div className="composer-row">
-                  <textarea
-                    className="textarea"
-                    value={input}
-                    onChange={(event) => setInput(event.target.value)}
-                    placeholder="Ask Bag-v1 anything..."
-                    rows={5}
-                  />
-                  <button className="button button-primary" type="submit" disabled={isSending || input.trim().length === 0}>
-                    <ArrowUpRight size={16} /> {isSending ? 'Sending...' : 'Send'}
+              <div className="toolbar">
+                <div className="toolbar-left">
+                  <button
+                    className="button button-ghost"
+                    type="button"
+                    onClick={() => speak(messages.at(-1)?.content ?? 'Voice is ready.')}
+                    disabled={!voiceEnabled || messages.length === 0}
+                  >
+                    <Volume2 size={16} /> Read last reply
                   </button>
                 </div>
-
-                <div className="composer-actions">
-                  <div className="switches">
-                    <button className="button button-ghost" type="button" onClick={openFilePicker}>
-                      <Paperclip size={16} /> Upload file
-                    </button>
-                    <button className="button button-ghost" type="button" onClick={startListening} disabled={isListening}>
-                      <Mic size={16} /> {isListening ? 'Listening...' : 'Dictate'}
-                    </button>
-                    <button className="button button-ghost" type="button" onClick={stopListening} disabled={!isListening}>
-                      <MicOff size={16} /> Stop listening
-                    </button>
-                    <button
-                      className="button button-ghost"
-                      type="button"
-                      onClick={() => window.speechSynthesis.cancel()}
-                      disabled={!isSpeaking}
-                    >
-                      <Play size={16} /> Stop voice
-                    </button>
-                  </div>
-                  <p className="helper">{error || 'Type, dictate, upload, or use voice output.'}</p>
+                <div className="toolbar-right">
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={voiceEnabled}
+                      onChange={(event) => setVoiceEnabled(event.target.checked)}
+                    />
+                    Voice output
+                  </label>
+                  <select
+                    className="control"
+                    value={selectedVoice}
+                    onChange={(event) => setSelectedVoice(event.target.value)}
+                    aria-label="Select voice"
+                    disabled={availableVoices.length === 0}
+                  >
+                    {availableVoices.length === 0 ? (
+                      <option value="">Loading voices...</option>
+                    ) : (
+                      availableVoices.map((voice) => (
+                        <option key={voice.name} value={voice.name}>
+                          {voice.name} ({voice.lang})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <label className="toggle" title="Speech speed">
+                    Speed
+                    <input
+                      type="range"
+                      min="0.8"
+                      max="1.3"
+                      step="0.02"
+                      value={speechRate}
+                      onChange={(event) => setSpeechRate(Number(event.target.value))}
+                    />
+                  </label>
                 </div>
+              </div>
+            </div>
 
-                <div className="quick-prompts">
-                  {QUICK_PROMPTS.map((prompt) => (
-                    <button
-                      key={prompt}
-                      className="chip"
-                      type="button"
-                      onClick={() => submitChat(prompt)}
-                      disabled={isSending}
-                    >
-                      {prompt}
-                    </button>
+            <div className="messages">
+              {messages.length === 0 ? (
+                <div className="empty-state">
+                  <h2>Start a conversation</h2>
+                  <p>Type a prompt, attach a file, or pick one of the quick starters.</p>
+                </div>
+              ) : null}
+
+              {messages.map((message, index) => (
+                <article key={`${message.role}-${index}`} className={`message ${message.role}`}>
+                  <div className="message-meta">{message.role === 'user' ? 'You' : APP_NAME}</div>
+                  <div className="bubble">{message.content}</div>
+                </article>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+
+            <form className="composer" onSubmit={handleSubmit}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="sr-only"
+                multiple
+                onChange={handleAttachmentPick}
+              />
+
+              {attachments.length > 0 ? (
+                <div className="attachment-strip">
+                  {attachments.map((attachment) => (
+                    <span key={attachment.id} className="attachment-chip">
+                      <span>
+                        <strong>{attachment.name}</strong>
+                        <small>{attachment.type || 'file'}</small>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(attachment.id)}
+                        aria-label={`Remove ${attachment.name}`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
                   ))}
                 </div>
-              </form>
-            </section>
+              ) : null}
 
-            <section className="panel canvas-panel">
-              <div className="section-heading-row">
-                <div>
-                  <div className="section-title">Canvas</div>
-                  <p className="section-subtitle">Edit here, then copy or export as text, Word, or PDF.</p>
-                </div>
-                <div className="status-pill">Editable draft</div>
+              <div className="composer-row">
+                <textarea
+                  className="textarea"
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  placeholder="Ask Bag-v1 anything..."
+                  rows={5}
+                />
+                <button className="button button-primary" type="submit" disabled={isSending || input.trim().length === 0}>
+                  <ArrowUpRight size={16} /> {isSending ? 'Sending...' : 'Send'}
+                </button>
               </div>
+
+              <div className="composer-actions">
+                <div className="switches">
+                  <button className="button button-ghost" type="button" onClick={openFilePicker}>
+                    <Paperclip size={16} /> Upload file
+                  </button>
+                  <button className="button button-ghost" type="button" onClick={startListening} disabled={isListening}>
+                    <Mic size={16} /> {isListening ? 'Listening...' : 'Dictate'}
+                  </button>
+                  <button className="button button-ghost" type="button" onClick={stopListening} disabled={!isListening}>
+                    <MicOff size={16} /> Stop listening
+                  </button>
+                  <button
+                    className="button button-ghost"
+                    type="button"
+                    onClick={() => window.speechSynthesis.cancel()}
+                    disabled={!isSpeaking}
+                  >
+                    <Play size={16} /> Stop voice
+                  </button>
+                </div>
+                <p className="helper">{error || 'Type, dictate, upload, or use voice output.'}</p>
+              </div>
+            </form>
+          </section>
+
+          <aside className="panel tools-panel">
+            <div className="sidebar-card">
+              <div className="section-title">Canvas</div>
+              <p className="section-subtitle">Edit the latest answer, then copy or export it cleanly.</p>
 
               <textarea
                 className="textarea canvas-textarea"
@@ -956,7 +980,7 @@ export default function HomePage() {
 
               <div className="canvas-actions">
                 <button className="button button-ghost" type="button" onClick={copyCanvas} disabled={!canvasText.trim()}>
-                  <Copy size={16} /> Copy canvas
+                  <Copy size={16} /> Copy
                 </button>
                 <button className="button button-ghost" type="button" onClick={downloadTextFile} disabled={!canvasText.trim()}>
                   <Download size={16} /> TXT
@@ -968,40 +992,29 @@ export default function HomePage() {
                   <Download size={16} /> Word
                 </button>
                 <button className="button button-danger" type="button" onClick={() => setCanvasText('')} disabled={!canvasText.trim()}>
-                  <RefreshCcw size={16} /> Clear canvas
+                  <RefreshCcw size={16} /> Clear
                 </button>
               </div>
+            </div>
 
-              <p className="helper">When the assistant finishes a reply, Bag-v1 drops it here automatically so you can polish and export it.</p>
-            </section>
-
-            <section className="panel image-panel">
-              <div className="section-heading-row">
-                <div>
-                  <div className="section-title">Image generation</div>
-                  <p className="section-subtitle">
-                    {canUseAdvancedTools
-                      ? 'Prompt an image, then preview the result below.'
-                      : 'Sign in to unlock image generation.'}
-                  </p>
-                </div>
-                <div className="status-pill">{canUseAdvancedTools ? 'OpenRouter' : 'Locked'}</div>
-              </div>
+            <div className="sidebar-card">
+              <div className="section-title">Image generation</div>
+              <p className="section-subtitle">
+                {canUseAdvancedTools ? 'Generate visuals with the signed-in account.' : 'Sign in to unlock image generation.'}
+              </p>
 
               {canUseAdvancedTools ? (
                 <>
-                  <div className="composer-row">
-                    <textarea
-                      className="textarea"
-                      value={imagePrompt}
-                      onChange={(event) => setImagePrompt(event.target.value)}
-                      placeholder="Describe the image you want..."
-                      rows={3}
-                    />
-                    <button className="button button-primary" type="button" onClick={generateImage} disabled={isGeneratingImage}>
-                      <Sparkles size={16} /> {isGeneratingImage ? 'Generating...' : 'Generate'}
-                    </button>
-                  </div>
+                  <textarea
+                    className="textarea"
+                    value={imagePrompt}
+                    onChange={(event) => setImagePrompt(event.target.value)}
+                    placeholder="Describe the image you want..."
+                    rows={4}
+                  />
+                  <button className="button button-primary" type="button" onClick={generateImage} disabled={isGeneratingImage}>
+                    <Sparkles size={16} /> {isGeneratingImage ? 'Generating...' : 'Generate image'}
+                  </button>
 
                   {imageError ? <div className="error">{imageError}</div> : null}
 
@@ -1018,25 +1031,27 @@ export default function HomePage() {
                 </>
               ) : (
                 <div className="locked-panel">
-                  <div className="hero-card">
-                    <span className="eyebrow">Premium tool</span>
-                    <h3>Sign in to generate images.</h3>
-                    <p>The image model stays hidden until you sign in. That keeps the guest UI clean and locked to the default chat model.</p>
-                    <EmailOTPAuth className="auth-button-wrap" fullWidth onSuccess={async (signedInUser) => {
+                  <p className="helper">
+                    The image model stays hidden until you sign in. That keeps the guest workspace focused on chat.
+                  </p>
+                  <EmailOTPAuth
+                    className="auth-button-wrap"
+                    fullWidth
+                    onSuccess={async (signedInUser) => {
                       setSessionUser(signedInUser)
                       setUserId(signedInUser.id)
                       window.localStorage.removeItem(USER_ID_KEY)
                       window.location.reload()
-                    }} />
-                  </div>
+                    }}
+                  />
                 </div>
               )}
-            </section>
-          </div>
+            </div>
+          </aside>
         </section>
 
         <p className="footer-note">
-          OpenRouter chat, canvas export, file uploads, and image generation all run from the same Vercel app. Set `OPENROUTER_API_KEY` before you use the routes.
+          OpenRouter chat, file uploads, canvas export, and image generation run from the same Bag-v1 workspace.
         </p>
       </div>
     </main>

@@ -70,8 +70,8 @@ function resolveModel(model: string | undefined, isSignedIn: boolean) {
     return DEFAULT_MODEL
   }
 
-  const normalized = normalizeModelId(model?.trim() || DEFAULT_MODEL)
-  return MODEL_OPTIONS.some((option) => option.id === normalized) ? normalized : DEFAULT_MODEL
+  const requestedModel = normalizeModelId(model?.trim() || DEFAULT_MODEL)
+  return MODEL_OPTIONS.some((option) => option.id === requestedModel) ? requestedModel : DEFAULT_MODEL
 }
 
 export async function POST(request: Request) {

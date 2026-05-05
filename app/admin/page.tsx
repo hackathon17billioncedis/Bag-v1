@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, RefreshCcw, Shield } from 'lucide-react'
 import type { SessionUser } from '@/lib/auth'
 import { apiUrl } from '@/lib/client-config'
-import { GoogleSignInButton } from '@/components/google-sign-in-button'
+import { EmailOTPAuth } from '@/components/email-otp-auth'
 
 type AdminOverview = {
   storageAvailable: boolean
@@ -76,7 +76,7 @@ export default function AdminPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!sessionUser?.email) {
-      setError('Please sign in with Google first.')
+      setError('Please sign in with your admin email first.')
       return
     }
 
@@ -124,9 +124,9 @@ export default function AdminPage() {
 
         <section className="panel hero-card">
           <span className="eyebrow">Admin access</span>
-          <h2>Open the Bag-v1 portal with the allowlisted Google account.</h2>
+          <h2>Open the Bag-v1 portal with the allowlisted admin account.</h2>
           <p className="helper">
-            This dashboard stays separate from the assistant workspace. Sign in with the admin Gmail account to load the portal.
+            This dashboard stays separate from the assistant workspace. Sign in with the admin username and email to load the portal.
           </p>
         </section>
 
@@ -134,7 +134,7 @@ export default function AdminPage() {
           <form className="admin-login" onSubmit={handleSubmit}>
             <div>
               <div className="section-title">Access</div>
-              <p className="section-subtitle">Sign in with the allowlisted Google account to open the dashboard.</p>
+              <p className="section-subtitle">Sign in with the allowlisted admin email and username to open the dashboard.</p>
             </div>
             <div className="admin-toolbar">
               {sessionUser ? (
@@ -142,14 +142,14 @@ export default function AdminPage() {
                   {status === 'loading' ? 'Loading...' : 'Open dashboard'}
                 </button>
               ) : (
-                <GoogleSignInButton
+                <EmailOTPAuth
                   className="auth-button-wrap"
-                  fullWidth={false}
+                  fullWidth
                   onSuccess={async (signedInUser) => {
-                  setSessionUser(signedInUser)
+                    setSessionUser(signedInUser)
                     await loadOverview()
                   }}
-                  />
+                />
               )}
             </div>
             <p className="meta-row">

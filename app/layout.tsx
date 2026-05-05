@@ -1,17 +1,5 @@
 import type { Metadata } from 'next'
-import Script from 'next/script'
-import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
-
-const geistSans = Geist({
-  subsets: ['latin'],
-  variable: '--font-sans',
-})
-
-const geistMono = Geist_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
-})
 
 export const metadata: Metadata = {
   title: 'Bag-v1 | Vercel-ready AI assistant',
@@ -24,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en">
       <body>
         {children}
       </body>

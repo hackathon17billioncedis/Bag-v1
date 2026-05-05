@@ -36,10 +36,9 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
   background: transparent;
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
 }
 
 a {
@@ -175,6 +174,13 @@ select {
   align-items: start;
 }
 
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.45fr) minmax(300px, 0.92fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
 .workspace-stack {
   display: grid;
   gap: 1.25rem;
@@ -227,8 +233,54 @@ select {
 
 .chat-panel {
   display: grid;
-  grid-template-rows: auto auto auto minmax(420px, 1fr) auto auto;
-  min-height: 860px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 78vh;
+}
+
+.sidebar-panel,
+.tools-panel {
+  position: sticky;
+  top: 1.2rem;
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem;
+  min-height: 0;
+}
+
+.sidebar-panel {
+  max-height: calc(100vh - 2.4rem);
+  overflow: auto;
+}
+
+.tools-panel {
+  max-height: calc(100vh - 2.4rem);
+  overflow: auto;
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sidebar-brandline {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.sidebar-card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 1.15rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-actions {
+  display: grid;
+  gap: 0.7rem;
 }
 
 .chat-header {
@@ -365,6 +417,14 @@ select {
   backdrop-filter: blur(24px);
 }
 
+.model-switcher-menu-sidebar {
+  position: static;
+  left: auto;
+  right: auto;
+  top: auto;
+  max-height: 320px;
+}
+
 .model-switcher-group {
   display: grid;
   gap: 0.35rem;
@@ -435,6 +495,32 @@ select {
   margin: 0;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.email-input-section,
+.otp-input-section {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.input-stack {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.otp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.error-message {
+  margin-top: 0.75rem;
+  color: #ffd7de;
+  background: rgba(255, 107, 139, 0.1);
+  border: 1px solid rgba(255, 107, 139, 0.2);
+  padding: 0.8rem 0.95rem;
+  border-radius: 0.95rem;
 }
 
 .model-card {
@@ -715,6 +801,15 @@ select {
   gap: 0.55rem;
 }
 
+.quick-prompts-compact {
+  display: grid;
+}
+
+.quick-prompts-compact .chip {
+  width: 100%;
+  text-align: left;
+}
+
 .chip {
   padding: 0.6rem 0.85rem;
   cursor: pointer;
@@ -889,6 +984,10 @@ select {
 }
 
 @media (max-width: 1100px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
   .layout {
     grid-template-columns: 1fr;
   }
@@ -900,6 +999,13 @@ select {
 
   .chat-panel {
     min-height: auto;
+  }
+
+  .sidebar-panel,
+  .tools-panel {
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 
   .stats {
@@ -995,5 +1101,13 @@ select {
 
   .canvas-actions .button {
     width: 100%;
+  }
+
+  .sidebar-card,
+  .chat-panel,
+  .tools-panel,
+  .sidebar-panel {
+    padding-left: 0.95rem;
+    padding-right: 0.95rem;
   }
 }
