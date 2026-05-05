@@ -808,14 +808,16 @@ export default function HomePage() {
             <div className="brand-copy">
               <h1>BAG-V1</h1>
             </div>
-            <button
-              className="icon-button sidebar-toggle"
-              type="button"
-              onClick={() => setIsSidebarOpen((current) => !current)}
-              aria-label={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
-            >
-              <Menu size={16} />
-            </button>
+            {sessionUser ? (
+              <button
+                className="icon-button sidebar-toggle"
+                type="button"
+                onClick={() => setIsSidebarOpen((current) => !current)}
+                aria-label={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+              >
+                <Menu size={16} />
+              </button>
+            ) : null}
           </div>
 
           <div className="toolbar-left">
@@ -858,19 +860,19 @@ export default function HomePage() {
 
         </header>
 
-        <div className={`workspace-layout ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-          <aside className="panel workspace-sidebar" aria-label="Conversation sidebar">
-            <div className="sidebar-header">
-              <div>
-                <div className="section-title">Chats</div>
-                <p className="section-subtitle">New chat, history, and memory.</p>
+        <div className={`workspace-layout ${sessionUser ? (isSidebarOpen ? 'sidebar-open' : 'sidebar-closed') : 'sidebar-closed'}`}>
+          {sessionUser ? (
+            <aside className="panel workspace-sidebar" aria-label="Conversation sidebar">
+              <div className="sidebar-header">
+                <div>
+                  <div className="section-title">Chats</div>
+                  <p className="section-subtitle">New chat, history, and memory.</p>
+                </div>
+                <button className="button button-primary" type="button" onClick={() => void startNewConversation()}>
+                  <Plus size={16} /> New chat
+                </button>
               </div>
-              <button className="button button-primary" type="button" onClick={() => void startNewConversation()}>
-                <Plus size={16} /> New chat
-              </button>
-            </div>
 
-            {sessionUser ? (
               <>
                 <section className="sidebar-section">
                   <div className="section-title">History</div>
@@ -920,12 +922,8 @@ export default function HomePage() {
                   </div>
                 </section>
               </>
-            ) : (
-              <div className="locked-panel">
-                <p className="helper">Sign in to save chat history and memory.</p>
-              </div>
-            )}
-          </aside>
+            </aside>
+          ) : null}
 
           <section className="panel chat-panel workspace-panel">
           <div className="chat-header">
