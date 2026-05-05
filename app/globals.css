@@ -1985,3 +1985,210 @@ body {
     padding-right: 14px;
   }
 }
+
+/* Clean single-workspace overrides for the revised Bag-v1 layout. */
+.container {
+  width: min(1240px, calc(100% - 1.2rem));
+  padding: 1rem 0 1.25rem;
+}
+
+.topbar {
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.workspace-panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.workspace-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
+}
+
+.quick-prompts-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.quick-prompts-inline .chip {
+  border-radius: 999px;
+}
+
+.model-switcher-inline {
+  position: relative;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.model-switcher-compact {
+  min-height: 46px;
+}
+
+.model-switcher-menu {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow: auto;
+  z-index: 30;
+}
+
+.locked-model-space {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.auth-popover {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: rgba(17, 20, 24, 0.92);
+}
+
+.messages {
+  display: grid;
+  gap: 0.95rem;
+  padding: 0.3rem 0 0.2rem;
+}
+
+.message {
+  max-width: 88%;
+}
+
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.message-action {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.message-action:hover {
+  color: var(--text);
+  border-color: rgba(124, 140, 255, 0.4);
+}
+
+.composer {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.15rem 0 0;
+}
+
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.composer-send-stack {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.workspace-drawer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.workspace-drawer .sidebar-card {
+  padding: 1rem;
+}
+
+.canvas-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.canvas-actions .button {
+  flex: 1 1 auto;
+}
+
+.thinking-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  padding: 0.7rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.spin {
+  animation: bag-spin 1s linear infinite;
+}
+
+.tools-popover-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.tools-popover-item:disabled:hover {
+  border-color: transparent;
+}
+
+@keyframes bag-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 820px) {
+  .workspace-topbar,
+  .composer-toolbar,
+  .composer-send-stack {
+    align-items: flex-start;
+  }
+
+  .workspace-drawer {
+    grid-template-columns: 1fr;
+  }
+
+  .message {
+    max-width: 100%;
+  }
+}

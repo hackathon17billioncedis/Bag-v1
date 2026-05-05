@@ -4,28 +4,29 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUpRight,
-  Copy,
-  Download,
   Check,
   ChevronDown,
+  Copy,
+  Download,
   LoaderCircle,
+  Lock,
   Mic,
   MicOff,
   Paperclip,
   Plus,
-  Play,
   RefreshCcw,
-  Lock,
   Search,
   Sparkles,
+  ThumbsDown,
+  ThumbsUp,
   Volume2,
   X,
 } from 'lucide-react'
-import { APP_NAME, DEFAULT_MODEL, getModelOption, getModelOptions, type ModelOption } from '@/lib/models'
+import Image from 'next/image'
+import { EmailOTPAuth } from '@/components/email-otp-auth'
 import { apiUrl } from '@/lib/client-config'
 import type { SessionUser } from '@/lib/auth'
-import { EmailOTPAuth } from '@/components/email-otp-auth'
-import Image from 'next/image'
+import { APP_NAME, DEFAULT_MODEL, getModelOption, getModelOptions, type ModelOption } from '@/lib/models'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -62,11 +63,6 @@ const QUICK_PROMPTS = [
   'Summarize notes',
 ]
 
-const STORAGE_KEY = 'bag-v1-chat-state'
-const CANVAS_STORAGE_KEY = 'bag-v1-canvas-state'
-const IMAGE_STORAGE_KEY = 'bag-v1-image-state'
-const VOICE_STORAGE_KEY = 'bag-v1-voice-state'
-const USER_ID_KEY = 'bag-v1-user-id'
 const MAX_ATTACHMENT_CHARS = 12000
 
 function normalizeFilename(seed: string) {
@@ -87,14 +83,12 @@ export default function HomePage() {
   const [isSending, setIsSending] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
-  const [voiceEnabled, setVoiceEnabled] = useState(true)
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
-  const [selectedVoice, setSelectedVoice] = useState('')
-  const [speechRate, setSpeechRate] = useState(1.02)
   const [error, setError] = useState('')
-  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [isThinking, setIsThinking] = useState(false)
+  const [isAuthMenuOpen, setIsAuthMenuOpen] = useState(false)
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
+  const [isToolMenuOpen, setIsToolMenuOpen] = useState(false)
 
   const [imagePrompt, setImagePrompt] = useState('A sleek futuristic AI assistant dashboard')
   const [imageUrl, setImageUrl] = useState('')
@@ -102,8 +96,7 @@ export default function HomePage() {
   const [imageError, setImageError] = useState('')
   const [attachments, setAttachments] = useState<UploadedFile[]>([])
   const [canvasText, setCanvasText] = useState('')
-  const [isToolMenuOpen, setIsToolMenuOpen] = useState(false)
-  const [isSpeakerMenuOpen, setIsSpeakerMenuOpen] = useState(false)
+  const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in')
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const recognitionRef = useRef<VoiceRecognition | null>(null)
@@ -127,52 +120,31 @@ export default function HomePage() {
       groups.set(option.category, list)
     }
 
-    return Array.from(groups.entries()).map(([category, options]) => ({
-      category,
-      options,
-    }))
+    return Array.from(groups.entries()).map(([category, options]) => ({ category, options }))
   }, [visibleModelOptions])
 
   useEffect(() => {
-    if (visibleModelOptions.length === 0) {
-      return
-    }
-
     if (!visibleModelOptions.some((option) => option.id === model)) {
       setModel(visibleModelOptions[0]?.id ?? DEFAULT_MODEL)
     }
   }, [model, visibleModelOptions])
 
   useEffect(() => {
-    if (!isModelMenuOpen) {
+    if (!isModelMenuOpen && !isToolMenuOpen && !isAuthMenuOpen) {
       return
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsModelMenuOpen(false)
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isModelMenuOpen])
-
-  useEffect(() => {
-    if (!isToolMenuOpen && !isSpeakerMenuOpen) {
-      return
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
         setIsToolMenuOpen(false)
-        setIsSpeakerMenuOpen(false)
+        setIsAuthMenuOpen(false)
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isToolMenuOpen, isSpeakerMenuOpen])
+  }, [isAuthMenuOpen, isModelMenuOpen, isToolMenuOpen])
 
   useEffect(() => {
     let cancelled = false
@@ -192,77 +164,30 @@ export default function HomePage() {
         }
       } catch {
         resolvedSessionUser = null
+        if (!cancelled) {
+          setSessionUser(null)
+        }
       }
 
-      const storedUserId = window.localStorage.getItem(USER_ID_KEY)
-      const resolvedUserId = resolvedSessionUser?.id || storedUserId || crypto.randomUUID()
+      const resolvedUserId = resolvedSessionUser?.id || crypto.randomUUID()
+
       if (!cancelled) {
         setUserId(resolvedUserId)
         setIsSessionLoading(false)
       }
 
       if (!resolvedSessionUser) {
-        window.localStorage.setItem(USER_ID_KEY, resolvedUserId)
-      }
-
-      try {
-        const stored = window.localStorage.getItem(STORAGE_KEY)
-        if (stored) {
-          const parsed = JSON.parse(stored) as {
-            messages?: ChatMessage[]
-            model?: string
-            webSearchEnabled?: boolean
-          }
-          if (Array.isArray(parsed.messages) && !cancelled) {
-            setMessages(parsed.messages)
-          }
-          if (parsed.model && !cancelled) {
-            setModel(parsed.model)
-          }
-          if (typeof parsed.webSearchEnabled === 'boolean' && !cancelled && resolvedSessionUser) {
-            setWebSearchEnabled(parsed.webSearchEnabled)
-          }
-        }
-
-        const storedImage = window.localStorage.getItem(IMAGE_STORAGE_KEY)
-        if (storedImage) {
-          const parsedImage = JSON.parse(storedImage) as { prompt?: string; imageUrl?: string }
-          if (parsedImage.prompt && !cancelled) {
-            setImagePrompt(parsedImage.prompt)
-          }
-          if (parsedImage.imageUrl && !cancelled) {
-            setImageUrl(parsedImage.imageUrl)
-          }
-        }
-
-        const storedCanvas = window.localStorage.getItem(CANVAS_STORAGE_KEY)
-        if (storedCanvas && !cancelled) {
-          setCanvasText(storedCanvas)
-        }
-
-        const storedVoice = window.localStorage.getItem(VOICE_STORAGE_KEY)
-        if (storedVoice) {
-          const parsedVoice = JSON.parse(storedVoice) as {
-            voiceEnabled?: boolean
-            selectedVoice?: string
-            speechRate?: number
-          }
-          if (typeof parsedVoice.voiceEnabled === 'boolean' && !cancelled) {
-            setVoiceEnabled(parsedVoice.voiceEnabled)
-          }
-          if (typeof parsedVoice.selectedVoice === 'string' && !cancelled) {
-            setSelectedVoice(parsedVoice.selectedVoice)
-          }
-          if (typeof parsedVoice.speechRate === 'number' && !cancelled) {
-            setSpeechRate(parsedVoice.speechRate)
-          }
-        }
-      } catch {
-        // Ignore storage errors and fall back to a clean session.
+        setMessages([])
+        setInput('')
+        setWebSearchEnabled(false)
+        setModel(DEFAULT_MODEL)
+        setImagePrompt('A sleek futuristic AI assistant dashboard')
+        setImageUrl('')
+        setCanvasText('')
       }
 
       if (!resolvedSessionUser) {
-        setWebSearchEnabled(false)
+        return
       }
 
       try {
@@ -272,7 +197,6 @@ export default function HomePage() {
         }
 
         const payload = (await response.json()) as {
-          storageAvailable?: boolean
           entries?: Array<{ role: 'user' | 'assistant'; content: string }>
         }
 
@@ -285,7 +209,7 @@ export default function HomePage() {
           )
         }
       } catch {
-        // Ignore history errors and keep the local session alive.
+        // Ignore history errors.
       }
     }
 
@@ -297,55 +221,8 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ messages, model, webSearchEnabled }),
-    )
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, model, webSearchEnabled])
-
-  useEffect(() => {
-    if (!canUseAdvancedTools && webSearchEnabled) {
-      setWebSearchEnabled(false)
-    }
-  }, [canUseAdvancedTools, webSearchEnabled])
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      IMAGE_STORAGE_KEY,
-      JSON.stringify({ prompt: imagePrompt, imageUrl }),
-    )
-  }, [imagePrompt, imageUrl])
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      VOICE_STORAGE_KEY,
-      JSON.stringify({ voiceEnabled, selectedVoice, speechRate }),
-    )
-  }, [voiceEnabled, selectedVoice, speechRate])
-
-  useEffect(() => {
-    window.localStorage.setItem(CANVAS_STORAGE_KEY, canvasText)
-  }, [canvasText])
-
-  useEffect(() => {
-    const refreshVoices = () => {
-      const voices = window.speechSynthesis.getVoices()
-      setAvailableVoices(voices)
-
-      if (!selectedVoice && voices.length > 0) {
-        const preferred = voices.find((voice) => voice.lang.toLowerCase().startsWith('en'))
-        setSelectedVoice(preferred?.name ?? voices[0].name)
-      }
-    }
-
-    refreshVoices()
-    window.speechSynthesis.onvoiceschanged = refreshVoices
-
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null
-    }
-  }, [selectedVoice])
+  }, [messages])
 
   useEffect(() => {
     return () => {
@@ -354,19 +231,15 @@ export default function HomePage() {
   }, [])
 
   const speak = (text: string) => {
-    if (!voiceEnabled || !window.speechSynthesis) {
+    if (!text.trim()) {
       return
     }
 
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = speechRate
+    utterance.rate = 1
     utterance.pitch = 1
-    utterance.volume = 0.95
-    const voice = availableVoices.find((item) => item.name === selectedVoice)
-    if (voice) {
-      utterance.voice = voice
-    }
+    utterance.volume = 1
     utterance.onstart = () => setIsSpeaking(true)
     utterance.onend = () => setIsSpeaking(false)
     utterance.onerror = () => setIsSpeaking(false)
@@ -396,6 +269,7 @@ export default function HomePage() {
 
     recognition.onend = () => {
       setIsListening(false)
+      recognitionRef.current = null
     }
 
     recognitionRef.current = recognition
@@ -406,7 +280,17 @@ export default function HomePage() {
 
   const stopListening = () => {
     recognitionRef.current?.stop()
+    recognitionRef.current = null
     setIsListening(false)
+  }
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening()
+      return
+    }
+
+    startListening()
   }
 
   const openFilePicker = () => {
@@ -481,6 +365,7 @@ export default function HomePage() {
           hasFirstChunk = true
           setIsThinking(false)
         }
+
         setMessages((current) =>
           current.map((message, index) => {
             if (index !== current.length - 1 || message.role !== 'assistant') {
@@ -498,6 +383,7 @@ export default function HomePage() {
       assistantText += decoder.decode()
       const finalReply = assistantText.trim()
       setIsThinking(false)
+
       setMessages((current) =>
         current.map((message, index) => {
           if (index !== current.length - 1 || message.role !== 'assistant') {
@@ -531,23 +417,6 @@ export default function HomePage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     await submitChat()
-  }
-
-  const clearChat = () => {
-    setMessages([])
-    setInput('')
-    setError('')
-    setIsThinking(false)
-    window.localStorage.removeItem(STORAGE_KEY)
-    window.speechSynthesis.cancel()
-  }
-
-  const copyTranscript = async () => {
-    const transcript = messages
-      .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
-      .join('\n\n')
-
-    await navigator.clipboard.writeText(transcript)
   }
 
   const handleAttachmentPick = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -589,6 +458,10 @@ export default function HomePage() {
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+  }
+
+  const copyMessage = async (content: string) => {
+    await navigator.clipboard.writeText(content)
   }
 
   const copyCanvas = async () => {
@@ -711,69 +584,86 @@ export default function HomePage() {
               <h1>BAG-V1</h1>
             </div>
           </div>
-            <div className="toolbar-right">
+
+          <div className="toolbar-left">
             {sessionUser ? (
               <button
                 className="button button-ghost"
                 type="button"
                 onClick={async () => {
                   await fetch(apiUrl('/api/auth/logout'), { method: 'POST' })
-                  window.localStorage.removeItem(USER_ID_KEY)
                   window.location.reload()
                 }}
               >
                 <RefreshCcw size={16} /> Sign out
               </button>
-            ) : null}
-            <button className="button button-ghost" type="button" onClick={copyTranscript} disabled={messages.length === 0}>
-              <Copy size={16} /> Copy chat
-            </button>
-            <button className="button button-ghost" type="button" onClick={clearChat} disabled={messages.length === 0}>
-              <RefreshCcw size={16} /> Clear
+            ) : (
+              <>
+                <button
+                  className="button button-ghost"
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('sign-in')
+                    setIsAuthMenuOpen((current) => !current)
+                  }}
+                >
+                  Sign in
+                </button>
+                <button
+                  className="button button-primary"
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('sign-up')
+                    setIsAuthMenuOpen((current) => !current)
+                  }}
+                >
+                  Sign up
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="toolbar-right">
+            <button className="button button-ghost" type="button" onClick={() => (window.location.href = '/admin')}>
+              Admin
             </button>
           </div>
         </header>
 
-        <section className="workspace-grid">
-          <aside className="panel sidebar-panel">
-            <div className="sidebar-top">
-              <div className="section-title">Workspace</div>
-              <div className="status-pill">{sessionUser ? 'Signed in' : 'Guest mode'}</div>
-            </div>
-
-            <div className="sidebar-brandline">
+        <section className="panel chat-panel workspace-panel">
+          <div className="chat-header">
+            <div className="title-row">
+              <div>
+                <div className="section-title">Chat workspace</div>
+                <p className="section-subtitle">
+                  {currentModel.label}
+                  {canUseAdvancedTools && webSearchEnabled ? ' · Web search on' : ''}
+                </p>
+              </div>
               <div className="user-chip">
-                <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest access')}</span>
+                <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest mode')}</span>
               </div>
             </div>
 
-            <div className="sidebar-card">
-              <div className="section-title">Access</div>
-              {sessionUser ? (
-                <div className="sidebar-actions">
-                  <p className="helper">Signed in as {sessionUser.name || sessionUser.email}.</p>
-                </div>
-              ) : (
-                <EmailOTPAuth
-                  className="auth-button-wrap"
-                  fullWidth
-                  onSuccess={async (signedInUser) => {
-                    setSessionUser(signedInUser)
-                    setUserId(signedInUser.id)
-                    window.localStorage.removeItem(USER_ID_KEY)
-                    window.location.reload()
-                  }}
-                />
-              )}
-            </div>
-
-            <div className="sidebar-card">
-              <div className="section-title">Model</div>
+            <div className="workspace-topbar">
+              <div className="quick-prompts quick-prompts-inline">
+                {QUICK_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    className="chip"
+                    type="button"
+                    onClick={() => submitChat(prompt)}
+                    disabled={isSending}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
 
               {canUseAdvancedTools ? (
                 <div className="model-switcher model-switcher-inline">
                   <button
-                    className="model-switcher-trigger"
+                    className="model-switcher-trigger model-switcher-compact"
                     type="button"
                     onClick={() => setIsModelMenuOpen((current) => !current)}
                     aria-expanded={isModelMenuOpen}
@@ -782,15 +672,12 @@ export default function HomePage() {
                     <div className="model-switcher-copy">
                       <span className="model-switcher-label">Current model</span>
                       <strong>{currentModel.label}</strong>
-                      <span>
-                        {currentModel.category} · {currentModel.bestFor}
-                      </span>
                     </div>
                     <ChevronDown size={16} />
                   </button>
 
                   {isModelMenuOpen ? (
-                    <div className="model-switcher-menu model-switcher-menu-sidebar" role="menu">
+                    <div className="model-switcher-menu" role="menu">
                       {groupedModelOptions.map((group) => (
                         <div key={group.category} className="model-switcher-group">
                           <span className="model-switcher-group-label">{group.category}</span>
@@ -823,7 +710,11 @@ export default function HomePage() {
                 </div>
               ) : (
                 <div className="locked-model-space">
-                  <button className="model-switcher-trigger model-switcher-locked model-switcher-compact" type="button" disabled>
+                  <button
+                    className="model-switcher-trigger model-switcher-locked model-switcher-compact"
+                    type="button"
+                    disabled
+                  >
                     <div className="model-switcher-copy">
                       <span className="model-switcher-label">Model</span>
                       <strong>Llama 3.1 8B</strong>
@@ -831,127 +722,91 @@ export default function HomePage() {
                     </div>
                     <Lock size={16} />
                   </button>
-                  <p className="helper locked-model-note">Sign in to change models and unlock image generation.</p>
                 </div>
               )}
             </div>
 
-            <div className="sidebar-card">
-              <div className="section-title">Quick actions</div>
-              <div className="quick-prompts quick-prompts-compact">
-                {QUICK_PROMPTS.map((prompt) => (
-                  <button
-                    key={prompt}
-                    className="chip"
-                    type="button"
-                    onClick={() => submitChat(prompt)}
-                    disabled={isSending}
-                  >
-                    {prompt}
-                  </button>
-                ))}
+            {isAuthMenuOpen && !sessionUser ? (
+              <div className="auth-popover">
+                <div className="section-title">{authMode === 'sign-in' ? 'Sign in' : 'Sign up'}</div>
+                <EmailOTPAuth
+                  className="auth-button-wrap"
+                  fullWidth
+                  onSuccess={async (signedInUser) => {
+                    setSessionUser(signedInUser)
+                    setUserId(signedInUser.id)
+                    setIsAuthMenuOpen(false)
+                    window.location.reload()
+                  }}
+                />
               </div>
-            </div>
-          </aside>
+            ) : null}
+          </div>
 
-          <section className="panel chat-panel">
-            <div className="chat-header">
-              <div className="title-row">
-                <div>
-                <div className="section-title">Chat workspace</div>
-                  <p className="section-subtitle">
-                    {currentModel.label}
-                    {canUseAdvancedTools && webSearchEnabled ? ' · Web search on' : ''}
-                  </p>
-                </div>
-                <div className="user-chip">
-                  <span>{sessionUser?.email ?? (isSessionLoading ? 'Loading session...' : 'Guest mode')}</span>
-                </div>
+          <div className="messages">
+            {messages.length === 0 ? (
+              <div className="empty-state">
+                <h2>How can I help?</h2>
+                <p>Ask a question, upload a file, or open a tool from the plus menu.</p>
               </div>
+            ) : null}
 
-            </div>
+            {isThinking ? (
+              <div className="thinking-indicator" aria-live="polite">
+                <LoaderCircle size={16} className="spin" />
+                <span>Thinking with {currentModel.label}...</span>
+              </div>
+            ) : null}
 
-            <div className="messages">
-              {messages.length === 0 ? (
-                <div className="empty-state">
-                  <h2>How can I help?</h2>
-                  <p>Ask a question, upload a file, or start from the sidebar.</p>
-                </div>
-              ) : null}
+            {messages.map((message) => {
+              const isAssistant = message.role === 'assistant'
 
-              {isThinking ? (
-                <div className="thinking-indicator" aria-live="polite">
-                  <LoaderCircle size={16} className="spin" />
-                  <span>Thinking with {currentModel.label}...</span>
-                </div>
-              ) : null}
-
-              {messages.map((message, index) => (
-                <article key={`${message.role}-${index}`} className={`message ${message.role}`}>
+              return (
+                <article key={`${message.role}-${message.content.slice(0, 24)}`} className={`message ${message.role}`}>
                   <div className="message-meta">{message.role === 'user' ? 'You' : APP_NAME}</div>
                   <div className="bubble">{message.content}</div>
+                  <div className="message-actions">
+                    <button
+                      type="button"
+                      className="message-action"
+                      onClick={() => copyMessage(message.content)}
+                      aria-label="Copy message"
+                    >
+                      <Copy size={14} />
+                    </button>
+                    {isAssistant ? (
+                      <>
+                        <button type="button" className="message-action" aria-label="Helpful reply">
+                          <ThumbsUp size={14} />
+                        </button>
+                        <button type="button" className="message-action" aria-label="Unhelpful reply">
+                          <ThumbsDown size={14} />
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
                 </article>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
+              )
+            })}
+            <div ref={messagesEndRef} />
+          </div>
 
-            <form className="composer" onSubmit={handleSubmit}>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="sr-only"
-                multiple
-                onChange={handleAttachmentPick}
-              />
+          <form className="composer" onSubmit={handleSubmit}>
+            <input ref={fileInputRef} type="file" className="sr-only" multiple onChange={handleAttachmentPick} />
 
-              <div className="composer-toolbar">
-                <div className="composer-toolbar-left">
-                  <button
-                    className="icon-button"
-                    type="button"
-                    onClick={() => {
-                      setIsToolMenuOpen((current) => !current)
-                      setIsSpeakerMenuOpen(false)
-                    }}
-                    aria-label="Open tools"
-                    aria-expanded={isToolMenuOpen}
-                  >
-                    <Plus size={16} />
-                  </button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    onClick={() => {
-                      setIsSpeakerMenuOpen((current) => !current)
-                      setIsToolMenuOpen(false)
-                    }}
-                    aria-label="Open speaker controls"
-                    aria-expanded={isSpeakerMenuOpen}
-                  >
-                    <Volume2 size={16} />
-                  </button>
-                  <button
-                    className="button button-ghost composer-quick-action"
-                    type="button"
-                    onClick={openFilePicker}
-                  >
-                    <Paperclip size={16} /> Upload file
-                  </button>
-                </div>
-                <div className="composer-toolbar-right">
-                  <button
-                    className="button button-ghost composer-quick-action"
-                    type="button"
-                    onClick={() => speak(messages.at(-1)?.content ?? 'Voice is ready.')}
-                    disabled={!voiceEnabled || messages.length === 0}
-                  >
-                    <Play size={16} /> Read
-                  </button>
-                </div>
-              </div>
+            <div className="composer-toolbar">
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => setIsToolMenuOpen((current) => !current)}
+                aria-label="Open tools"
+                aria-expanded={isToolMenuOpen}
+              >
+                <Plus size={16} />
+              </button>
 
-                {isToolMenuOpen ? (
-                  <div className="tools-popover">
+              {isToolMenuOpen ? (
+                <div className="tools-popover">
                   <button
                     className="tools-popover-item"
                     type="button"
@@ -996,10 +851,6 @@ export default function HomePage() {
                     className="tools-popover-item"
                     type="button"
                     onClick={() => {
-                      if (!canUseAdvancedTools) {
-                        setIsToolMenuOpen(false)
-                        return
-                      }
                       setIsToolMenuOpen(false)
                       imageRef.current?.focus()
                       imageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -1028,110 +879,66 @@ export default function HomePage() {
                   </button>
                 </div>
               ) : null}
+            </div>
 
-              {isSpeakerMenuOpen ? (
-                <div className="speaker-panel">
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={voiceEnabled}
-                      onChange={(event) => setVoiceEnabled(event.target.checked)}
-                    />
-                    Speaker
-                  </label>
-                  <select
-                    className="control"
-                    value={selectedVoice}
-                    onChange={(event) => setSelectedVoice(event.target.value)}
-                    aria-label="Select voice"
-                    disabled={availableVoices.length === 0}
-                  >
-                    {availableVoices.length === 0 ? (
-                      <option value="">Loading voices...</option>
-                    ) : (
-                      availableVoices.map((voice) => (
-                        <option key={voice.name} value={voice.name}>
-                          {voice.name} ({voice.lang})
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  <label className="toggle" title="Speech speed">
-                    Speed
-                    <input
-                      type="range"
-                      min="0.8"
-                      max="1.3"
-                      step="0.02"
-                      value={speechRate}
-                      onChange={(event) => setSpeechRate(Number(event.target.value))}
-                    />
-                  </label>
-                </div>
-              ) : null}
-
-              {attachments.length > 0 ? (
-                <div className="attachment-strip">
-                  {attachments.map((attachment) => (
-                    <span key={attachment.id} className="attachment-chip">
-                      <span>
-                        <strong>{attachment.name}</strong>
-                        <small>{attachment.type || 'file'}</small>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeAttachment(attachment.id)}
-                        aria-label={`Remove ${attachment.name}`}
-                      >
-                        <X size={14} />
-                      </button>
+            {attachments.length > 0 ? (
+              <div className="attachment-strip">
+                {attachments.map((attachment) => (
+                  <span key={attachment.id} className="attachment-chip">
+                    <span>
+                      <strong>{attachment.name}</strong>
+                      <small>{attachment.type || 'file'}</small>
                     </span>
-                  ))}
-                </div>
-              ) : null}
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(attachment.id)}
+                      aria-label={`Remove ${attachment.name}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
 
-              <div className="composer-row">
-                <textarea
-                  className="textarea"
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  placeholder="Ask Bag-v1 anything..."
-                  rows={5}
-                />
+            <div className="composer-row">
+              <textarea
+                className="textarea"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Ask Bag-v1 anything..."
+                rows={5}
+              />
+              <div className="composer-send-stack">
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={toggleListening}
+                  aria-label={isListening ? 'Stop dictation' : 'Start dictation'}
+                >
+                  {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => speak(messages.at(-1)?.content ?? 'Voice is ready.')}
+                  disabled={messages.length === 0 || isSpeaking}
+                  aria-label="Read last reply"
+                >
+                  <Volume2 size={16} />
+                </button>
                 <button className="button button-primary" type="submit" disabled={isSending || input.trim().length === 0}>
                   <ArrowUpRight size={16} /> {isSending ? 'Sending...' : 'Send'}
                 </button>
               </div>
+            </div>
 
-              <div className="composer-actions">
-                <div className="switches">
-                  <button className="button button-ghost" type="button" onClick={openFilePicker}>
-                    <Paperclip size={16} /> Upload file
-                  </button>
-                  <button className="button button-ghost" type="button" onClick={startListening} disabled={isListening}>
-                    <Mic size={16} /> {isListening ? 'Listening...' : 'Dictate'}
-                  </button>
-                  <button className="button button-ghost" type="button" onClick={stopListening} disabled={!isListening}>
-                    <MicOff size={16} /> Stop listening
-                  </button>
-                  <button
-                    className="button button-ghost"
-                    type="button"
-                    onClick={() => window.speechSynthesis.cancel()}
-                    disabled={!isSpeaking}
-                  >
-                    <Play size={16} /> Stop voice
-                  </button>
-                </div>
-                <p className="helper">{error || 'Type, dictate, upload, or use voice output.'}</p>
-              </div>
-            </form>
-          </section>
+            <p className="helper">{error || 'Type, dictate, upload, or use voice output.'}</p>
+          </form>
 
-          <aside className="panel tools-panel">
+          <div className="workspace-drawer">
             <div className="sidebar-card">
               <div className="section-title">Canvas</div>
-
               <textarea
                 ref={canvasRef}
                 className="textarea canvas-textarea"
@@ -1153,9 +960,6 @@ export default function HomePage() {
                 </button>
                 <button className="button button-ghost" type="button" onClick={downloadWordFile} disabled={!canvasText.trim()}>
                   <Download size={16} /> Word
-                </button>
-                <button className="button button-danger" type="button" onClick={() => setCanvasText('')} disabled={!canvasText.trim()}>
-                  <RefreshCcw size={16} /> Clear
                 </button>
               </div>
             </div>
@@ -1192,15 +996,12 @@ export default function HomePage() {
                 </>
               ) : (
                 <div className="locked-panel">
-                  <p className="helper">
-                    Sign in to use image generation.
-                  </p>
+                  <p className="helper">Sign in to use image generation.</p>
                 </div>
               )}
             </div>
-          </aside>
+          </div>
         </section>
-
       </div>
     </main>
   )
