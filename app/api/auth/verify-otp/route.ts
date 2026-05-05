@@ -28,6 +28,16 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (!process.env.AUTH_SECRET?.trim()) {
+      return NextResponse.json(
+        {
+          error:
+            'AUTH_SECRET is missing. Set AUTH_SECRET in your Vercel environment variables, then redeploy.',
+        },
+        { status: 500 },
+      )
+    }
+
     const name = email.split('@')[0] || email
     const user = {
       id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,

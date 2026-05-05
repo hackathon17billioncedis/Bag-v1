@@ -115,6 +115,12 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
     await sendOtp()
   }
 
+  const authHint = error.includes('AUTH_SECRET')
+    ? 'Add AUTH_SECRET in Vercel environment variables, then redeploy.'
+    : error.includes('SMTP authentication failed')
+      ? 'For Gmail SMTP, use an App Password instead of your normal password.'
+      : ''
+
   return (
     <div className={className}>
       {step === 'details' ? (
@@ -195,7 +201,12 @@ export function EmailOTPAuth({ onSuccess, className, fullWidth = false }: Props)
         </div>
       )}
 
-      {error ? <div className="error-message">{error}</div> : null}
+      {error ? (
+        <div className="error-message">
+          <div>{error}</div>
+          {authHint ? <div className="meta-row">{authHint}</div> : null}
+        </div>
+      ) : null}
     </div>
   )
 }
