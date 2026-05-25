@@ -92,6 +92,45 @@ function normalizeFilename(seed: string) {
     .slice(0, 48) || 'bag-v1'
 }
 
+function formatAssistantDisplayText(text: string) {
+  const normalized = text.replace(/\r\n/g, '\n')
+  const lines = normalized.split('\n')
+  let inCodeBlock = false
+
+  const formatted = lines
+    .map((line) => {
+      const trimmed = line.trim()
+
+      if (trimmed.startsWith('```')) {
+        inCodeBlock = !inCodeBlock
+        return ''
+      }
+
+      if (inCodeBlock) {
+        return line
+      }
+
+      const bulletMatch = trimmed.match(/^[*+-]\s+(.*)$/)
+      if (bulletMatch) {
+        return `• ${bulletMatch[1].replace(/[`*_]/g, '')}`
+      }
+
+      const numberedMatch = trimmed.match(/^\d+\.\s+(.*)$/)
+      if (numberedMatch) {
+        return `• ${numberedMatch[1].replace(/[`*_]/g, '')}`
+      }
+
+      return line
+        .replace(/^#{1,6}\s+/, '')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/__(.*?)__/g, '$1')
+        .replace(/[*_`]/g, '')
+    })
+    .join('\n')
+
+  return formatted.replace(/\n{3,}/g, '\n\n').trim()
+}
+
 export default function HomePage() {
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null)
   const [isSessionLoading, setIsSessionLoading] = useState(true)
@@ -124,6 +163,7 @@ export default function HomePage() {
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in')
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const lastMessageCountRef = useRef(0)
   const recognitionRef = useRef<VoiceRecognition | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const canvasRef = useRef<HTMLTextAreaElement | null>(null)
@@ -426,7 +466,15 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const previousCount = lastMessageCountRef.current
+    const nextCount = messages.length
+    lastMessageCountRef.current = nextCount
+
+    if (nextCount <= previousCount) {
+      return
+    }
+
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end', inline: 'nearest' })
   }, [messages])
 
   useEffect(() => {
@@ -1036,11 +1084,14 @@ export default function HomePage() {
 
             {messages.map((message) => {
               const isAssistant = message.role === 'assistant'
+              const displayContent = isAssistant
+                ? formatAssistantDisplayText(message.content)
+                : message.content
 
               return (
                 <article key={`${message.role}-${message.content.slice(0, 24)}`} className={`message ${message.role}`}>
                   <div className="message-meta">{message.role === 'user' ? 'You' : APP_NAME}</div>
-                  <div className="bubble">{message.content}</div>
+                  <div className="bubble">{displayContent}</div>
                   <div className="message-actions">
                     <button
                       type="button"
