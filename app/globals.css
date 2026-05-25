@@ -131,6 +131,7 @@ html {
   border-left: 0;
   border-right: 0;
   background: rgba(11, 13, 16, 0.62);
+  overflow: visible;
 }
 
 .sidebar-card {
@@ -1634,13 +1635,16 @@ select {
 
 html,
 body {
+  height: 100%;
   background: var(--background);
   overflow-x: hidden;
+  overflow-y: hidden;
 }
 
 .app-shell {
-  min-height: 100vh;
-  overflow: visible;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: #0b0d10;
 }
 
