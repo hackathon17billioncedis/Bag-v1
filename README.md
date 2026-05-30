@@ -78,7 +78,7 @@ Vercel will detect the Next.js app automatically.
 - History is stored through Vercel KV when available
 - The admin dashboard lives at `/admin`
 - Admin access is allowlisted by `ADMIN_EMAIL`
-- `OPENROUTER_DEFAULT_MODEL` sets the starting model, while `OPENROUTER_MODELS` controls which of the supported models appear in the board. The current roster includes Llama 3.1 8B, Llama 3.2 3B, Llama 3.3 70B, Gemma 4 26B A4B, GPT OSS 20B, GPT OSS 120B, DeepSeek V4 Flash, Kimi K2.6, MiniMax M2.5, GLM 4.5 Air, Dolphin Mistral 24B Venice, Mistral Nemo, Mistral Small 24B 2501, Mistral Small 3.2 24B, Qwen 2.5 7B, Qwen3 235B A22B 2507, and Hermes 3 Llama 3.1 405B
+- `OPENROUTER_DEFAULT_MODEL` sets the starting model, while `OPENROUTER_MODELS` controls which of the supported models appear in the board. The current roster excludes the models that failed in testing: Llama 3.2 3B, Llama 3.3 70B, DeepSeek V4 Flash, Kimi K2.6, MiniMax M2.5, Dolphin Mistral 24B Venice, and Hermes 3 Llama 3.1 405B
 - Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` from your mail provider
 - If you use Gmail SMTP, enable 2-Step Verification on that account and use a Google App Password for `SMTP_PASSWORD`
 - Set `AUTH_SECRET` to a long random string so the app can sign its session cookie
