@@ -39,6 +39,20 @@ export const MODEL_OPTIONS: ModelOption[] = [
     bestFor: 'Balanced everyday chat',
   },
   {
+    id: 'meta-llama/llama-3.2-3b-instruct:free',
+    label: 'Llama 3.2 3B',
+    category: 'Llama',
+    description: 'Small, quick Llama option.',
+    bestFor: 'Fast lightweight replies',
+  },
+  {
+    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    label: 'Llama 3.3 70B',
+    category: 'Llama',
+    description: 'Bigger free Llama model.',
+    bestFor: 'Stronger general chat',
+  },
+  {
     id: 'google/gemma-4-26b-a4b-it:free',
     label: 'Gemma 4 26B A4B',
     category: 'Gemma',
@@ -51,6 +65,48 @@ export const MODEL_OPTIONS: ModelOption[] = [
     category: 'OpenAI',
     description: 'OpenAI open-source model.',
     bestFor: 'General assistant tasks',
+  },
+  {
+    id: 'openai/gpt-oss-120b:free',
+    label: 'GPT OSS 120B (Free)',
+    category: 'OpenAI',
+    description: 'Larger free GPT OSS option.',
+    bestFor: 'Higher-quality reasoning',
+  },
+  {
+    id: 'deepseek/deepseek-v4-flash:free',
+    label: 'DeepSeek V4 Flash',
+    category: 'DeepSeek',
+    description: 'Fast DeepSeek flash model.',
+    bestFor: 'Quick responses',
+  },
+  {
+    id: 'moonshotai/kimi-k2.6:free',
+    label: 'Kimi K2.6',
+    category: 'Moonshot',
+    description: 'Moonshot’s Kimi model.',
+    bestFor: 'General chat and reasoning',
+  },
+  {
+    id: 'minimax/minimax-m2.5:free',
+    label: 'MiniMax M2.5',
+    category: 'MiniMax',
+    description: 'Free MiniMax model.',
+    bestFor: 'Balanced assistant work',
+  },
+  {
+    id: 'z-ai/glm-4.5-air:free',
+    label: 'GLM 4.5 Air',
+    category: 'Z.AI',
+    description: 'Lightweight GLM option.',
+    bestFor: 'Fast general chat',
+  },
+  {
+    id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+    label: 'Dolphin Mistral 24B Venice',
+    category: 'Dolphin',
+    description: 'Dolphin-tuned Mistral variant.',
+    bestFor: 'Helpful chat responses',
   },
   {
     id: 'mistralai/mistral-nemo',
@@ -86,6 +142,13 @@ export const MODEL_OPTIONS: ModelOption[] = [
     category: 'Qwen',
     description: 'Very large Qwen option.',
     bestFor: 'Maximum capability',
+  },
+  {
+    id: 'nousresearch/hermes-3-llama-3.1-405b:free',
+    label: 'Hermes 3 Llama 3.1 405B',
+    category: 'Hermes',
+    description: 'Large Hermes instruction model.',
+    bestFor: 'Deep reasoning',
   },
 ]
 

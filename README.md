@@ -39,7 +39,7 @@ APP_NAME=Bag-v1
 APP_URL=http://localhost:3000
 SITE_URL=http://localhost:3000
 OPENROUTER_DEFAULT_MODEL=meta-llama/llama-3.1-8b-instruct
-OPENROUTER_MODELS=meta-llama/llama-3.1-8b-instruct,google/gemma-4-26b-a4b-it:free,openai/gpt-oss-20b:free,mistralai/mistral-nemo,mistralai/mistral-small-24b-instruct-2501,mistralai/mistral-small-3.2-24b-instruct,qwen/qwen-2.5-7b-instruct,qwen/qwen3-235b-a22b-2507
+OPENROUTER_MODELS=meta-llama/llama-3.1-8b-instruct,meta-llama/llama-3.2-3b-instruct:free,meta-llama/llama-3.3-70b-instruct:free,google/gemma-4-26b-a4b-it:free,openai/gpt-oss-20b:free,openai/gpt-oss-120b:free,deepseek/deepseek-v4-flash:free,moonshotai/kimi-k2.6:free,minimax/minimax-m2.5:free,z-ai/glm-4.5-air:free,cognitivecomputations/dolphin-mistral-24b-venice-edition:free,mistralai/mistral-nemo,mistralai/mistral-small-24b-instruct-2501,mistralai/mistral-small-3.2-24b-instruct,qwen/qwen-2.5-7b-instruct,qwen/qwen3-235b-a22b-2507,nousresearch/hermes-3-llama-3.1-405b:free
 OPENROUTER_IMAGE_MODEL=black-forest-labs/flux.2-klein-4b
 KV_REST_API_URL=your-vercel-kv-url
 KV_REST_API_TOKEN=your-vercel-kv-token
@@ -78,7 +78,7 @@ Vercel will detect the Next.js app automatically.
 - History is stored through Vercel KV when available
 - The admin dashboard lives at `/admin`
 - Admin access is allowlisted by `ADMIN_EMAIL`
-- `OPENROUTER_DEFAULT_MODEL` sets the starting model, while `OPENROUTER_MODELS` controls which of the supported models appear in the board
+- `OPENROUTER_DEFAULT_MODEL` sets the starting model, while `OPENROUTER_MODELS` controls which of the supported models appear in the board. The current roster includes Llama 3.1 8B, Llama 3.2 3B, Llama 3.3 70B, Gemma 4 26B A4B, GPT OSS 20B, GPT OSS 120B, DeepSeek V4 Flash, Kimi K2.6, MiniMax M2.5, GLM 4.5 Air, Dolphin Mistral 24B Venice, Mistral Nemo, Mistral Small 24B 2501, Mistral Small 3.2 24B, Qwen 2.5 7B, Qwen3 235B A22B 2507, and Hermes 3 Llama 3.1 405B
 - Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` from your mail provider
 - If you use Gmail SMTP, enable 2-Step Verification on that account and use a Google App Password for `SMTP_PASSWORD`
 - Set `AUTH_SECRET` to a long random string so the app can sign its session cookie
