@@ -1,45 +1,39 @@
 import { NextResponse } from 'next/server'
-import { DEFAULT_IMAGE_MODEL } from '@/lib/models'
+import { DEFAULT_VIDEO_MODEL } from '@/lib/models'
 import { NVIDIA_BASE_URL, getNvidiaApiKey } from '@/lib/nvidia'
-import { appendImagePrompt } from '@/lib/persistence'
 import { getSessionUserFromRequest } from '@/lib/auth'
 
-type ImageRequest = {
+type VideoRequest = {
   prompt?: string
   model?: string
-  userId?: string
-  userEmail?: string
 }
-
-const NVIDIA_CHAT_URL = `${NVIDIA_BASE_URL}/chat/completions`
 
 export async function POST(request: Request) {
   const sessionUser = await getSessionUserFromRequest(request)
   if (!sessionUser) {
     return NextResponse.json(
-      { error: 'Please sign in to generate images.' },
+      { error: 'Please sign in to generate videos.' },
       { status: 401 },
     )
   }
 
-  let body: ImageRequest
+  let body: VideoRequest
   try {
-    body = (await request.json()) as ImageRequest
+    body = (await request.json()) as VideoRequest
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }
 
   const prompt = body.prompt?.trim()
-  const userId = sessionUser.id.trim()
-  const userEmail = sessionUser.email.trim()
   if (!prompt) {
     return NextResponse.json({ error: 'Please provide a prompt.' }, { status: 400 })
   }
 
-  const model = body.model?.trim() || DEFAULT_IMAGE_MODEL
+  const model = body.model?.trim() || DEFAULT_VIDEO_MODEL
 
   const apiKey = getNvidiaApiKey()
-  const response = await fetch(NVIDIA_CHAT_URL, {
+
+  const response = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -53,7 +47,6 @@ export async function POST(request: Request) {
           content: prompt,
         },
       ],
-      modalities: ['image'],
       stream: false,
     }),
   })
@@ -62,7 +55,7 @@ export async function POST(request: Request) {
     const errorText = await response.text()
     return NextResponse.json(
       {
-        error: `Image generation failed with status ${response.status}.`,
+        error: `Video generation request failed with status ${response.status}.`,
         details: errorText,
       },
       { status: response.status },
@@ -72,32 +65,21 @@ export async function POST(request: Request) {
   const result = (await response.json()) as {
     choices?: Array<{
       message?: {
-        images?: Array<{
-          image_url?: {
-            url?: string
-          }
-        }>
         content?: string
       }
     }>
-    data?: Array<{ url?: string }>
   }
 
-  const imageUrl =
-    result.choices?.[0]?.message?.images?.[0]?.image_url?.url ??
-    result.data?.[0]?.url ??
-    ''
-  if (!imageUrl) {
+  const content = result.choices?.[0]?.message?.content ?? ''
+  if (!content) {
     return NextResponse.json(
-      { error: 'The model did not return an image URL.' },
+      { error: 'The model did not return a result.' },
       { status: 502 },
     )
   }
 
-  await appendImagePrompt(userId, prompt, model, userEmail)
-
   return NextResponse.json({
-    imageUrl,
+    result: content,
     model,
   })
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { DEFAULT_MODEL, MODEL_OPTIONS, SYSTEM_PROMPT, normalizeModelId } from '@/lib/models'
+import { NVIDIA_BASE_URL, isNvidiaChatModel } from '@/lib/nvidia'
 import { appendConversationEntry } from '@/lib/persistence'
 import { getSessionUserFromRequest } from '@/lib/auth'
 
@@ -77,18 +78,7 @@ function resolveModel(model: string | undefined, isSignedIn: boolean) {
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'OPENROUTER_API_KEY is not configured.' },
-      { status: 500 },
-    )
-  }
-
   const sessionUser = await getSessionUserFromRequest(request)
-
-  const siteUrl = process.env.SITE_URL ?? process.env.APP_URL ?? 'http://localhost:3000'
-  const appName = process.env.APP_NAME ?? 'Bag-v1'
 
   let body: ChatRequest
   try {
@@ -119,12 +109,35 @@ export async function POST(request: Request) {
       ]
     : messages
 
+  const isNvidia = isNvidiaChatModel(model)
+
+  if (isNvidia) {
+    const nvidiaKey = process.env.NVIDIA_API_KEY
+    if (!nvidiaKey) {
+      return NextResponse.json(
+        { error: 'NVIDIA_API_KEY is not configured.' },
+        { status: 500 },
+      )
+    }
+  } else {
+    const openRouterKey = process.env.OPENROUTER_API_KEY
+    if (!openRouterKey) {
+      return NextResponse.json(
+        { error: 'OPENROUTER_API_KEY is not configured.' },
+        { status: 500 },
+      )
+    }
+  }
+
+  const siteUrl = process.env.SITE_URL ?? process.env.APP_URL ?? 'http://localhost:3000'
+  const appName = process.env.APP_NAME ?? 'Bag-v1'
+
   const payload = {
     model,
     messages: [
       {
         role: 'system',
-        content: webSearchEnabled
+        content: webSearchEnabled && !isNvidia
           ? `${SYSTEM_PROMPT}\nYou are always Bag-v1, even if the underlying model changes.\nUse web search when the user asks for current, recent, local, or fact-sensitive information. Keep the answer grounded, concise, and cite useful sources naturally.`
           : `${SYSTEM_PROMPT}\nYou are always Bag-v1, even if the underlying model changes.`,
       },
@@ -132,21 +145,26 @@ export async function POST(request: Request) {
     ],
     temperature: 0.7,
     max_tokens: 1200,
-    ...(webSearchEnabled
+    ...(webSearchEnabled && !isNvidia
       ? {
           tools: [{ type: 'openrouter:web_search' }],
         }
       : {}),
   }
 
-  const response = await fetch(OPENROUTER_URL, {
+  const apiUrl = isNvidia ? `${NVIDIA_BASE_URL}/chat/completions` : OPENROUTER_URL
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${isNvidia ? process.env.NVIDIA_API_KEY : process.env.OPENROUTER_API_KEY}`,
+    'Content-Type': 'application/json',
+  }
+  if (!isNvidia) {
+    headers['HTTP-Referer'] = siteUrl
+    headers['X-Title'] = appName
+  }
+
+  const response = await fetch(apiUrl, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': siteUrl,
-      'X-Title': appName,
-    },
+    headers,
     body: JSON.stringify({ ...payload, stream: true }),
   })
 
@@ -154,7 +172,7 @@ export async function POST(request: Request) {
     const errorText = await response.text()
     return NextResponse.json(
       {
-        error: `OpenRouter request failed with status ${response.status}.`,
+        error: `Chat request failed with status ${response.status}.`,
         details: errorText,
       },
       { status: response.status },
