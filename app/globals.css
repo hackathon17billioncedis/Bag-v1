@@ -26,7 +26,8 @@
   --primary-strong: #0d8f70;
   --accent: #f59e0b;
   --danger: #ef4444;
-  --shadow: none;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 40px rgba(0, 0, 0, 0.4);
 }
 
 *,
@@ -97,13 +98,6 @@ html {
   align-items: stretch;
 }
 
-.panel,
-.sidebar-card,
-.stat {
-  border-radius: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-}
 
 .sidebar-panel,
 .tools-panel,
@@ -257,6 +251,8 @@ html {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: rgba(22, 26, 32, 0.98);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(20px);
 }
 
 .tools-popover-item {
@@ -275,6 +271,7 @@ html {
 
 .tools-popover-item:hover {
   border-color: rgba(16, 163, 127, 0.45);
+  transform: translateX(2px);
 }
 
 .tools-popover-item:disabled {
@@ -744,6 +741,14 @@ select {
   border-radius: 1.15rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sidebar-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.35);
 }
 
 .sidebar-actions {
@@ -1630,7 +1635,8 @@ select {
   --primary-strong: #0d8f70;
   --accent: #f59e0b;
   --danger: #ef4444;
-  --shadow: none;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 40px rgba(0, 0, 0, 0.4);
 }
 
 html,
@@ -1657,6 +1663,12 @@ body {
 
 .app-shell::after {
   background: rgba(11, 13, 16, 0.86);
+  animation: ambientDrift 10s ease-in-out infinite alternate;
+}
+
+@keyframes ambientDrift {
+  from { opacity: 0.7; }
+  to { opacity: 1; }
 }
 
 .container {
@@ -1704,13 +1716,6 @@ body {
   align-items: stretch;
 }
 
-.panel,
-.sidebar-card,
-.stat {
-  border-radius: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-}
 
 .sidebar-panel,
 .tools-panel,
@@ -2610,4 +2615,95 @@ body {
   .message {
     max-width: 100%;
   }
+}
+
+/* =========================================================================
+   Depth Enhancements — shadows, micro-interactions, 3D depth
+   ========================================================================= */
+
+.bubble {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.composer-row {
+  box-shadow: var(--shadow);
+}
+
+.composer-row:focus-within {
+  border-color: var(--primary);
+}
+
+.sidebar-card {
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease;
+}
+
+.sidebar-card:hover {
+  transform: translateY(-1px);
+}
+
+.button-primary {
+  box-shadow: 0 4px 16px rgba(16, 163, 127, 0.2);
+}
+
+.button-primary:hover {
+  box-shadow: 0 6px 24px rgba(16, 163, 127, 0.3);
+  transform: translateY(-1px);
+}
+
+.button-primary:active {
+  transform: translateY(0);
+}
+
+.button-ghost:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.icon-button:hover {
+  border-color: var(--primary);
+}
+
+.icon-button:active {
+  transform: scale(0.93);
+}
+
+.chip:hover {
+  background: rgba(16, 163, 127, 0.08);
+  border-color: rgba(16, 163, 127, 0.35);
+}
+
+.tools-popover,
+.model-switcher-menu,
+.auth-popover {
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(20px);
+}
+
+.tools-popover-item:hover {
+  transform: translateX(2px);
+  border-color: rgba(16, 163, 127, 0.4);
+}
+
+.model-switcher-trigger:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--border);
+}
+
+.model-switcher-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.message-action:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.control:focus,
+.textarea:focus {
+  border-color: var(--primary);
+}
+
+.panel {
+  box-shadow: var(--shadow);
 }
