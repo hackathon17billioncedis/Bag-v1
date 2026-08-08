@@ -1,3 +1,4 @@
+import { neon } from '@neondatabase/serverless'
 import { DEFAULT_MODEL } from '@/lib/models'
 
 export type ChatRole = 'user' | 'assistant'
@@ -28,10 +29,10 @@ export type MemoryItem = {
   sourceChatId: string
 }
 
-const USER_SET_KEY = 'bag-v1:users'
-const CHAT_COUNT_KEY = 'bag-v1:stats:chat_count'
-const IMAGE_COUNT_KEY = 'bag-v1:stats:image_count'
-const MODEL_COUNTS_KEY = 'bag-v1:stats:model_counts'
+type QueryFn = <TResult = Record<string, unknown>[]>(
+  strings: TemplateStringsArray,
+  ...params: unknown[]
+) => Promise<TResult>
 
 function isPlaceholderStorageValue(value: string | undefined) {
   if (!value) {
@@ -41,73 +42,31 @@ function isPlaceholderStorageValue(value: string | undefined) {
   const normalized = value.trim().toLowerCase()
   return (
     normalized.length === 0 ||
-    normalized.includes('your-kv') ||
+    normalized.includes('your-database') ||
+    normalized.includes('your-neon') ||
     normalized.includes('placeholder') ||
     normalized.includes('replace-me')
   )
 }
 
-async function getKvClient() {
-  if (
-    isPlaceholderStorageValue(process.env.KV_REST_API_URL) ||
-    isPlaceholderStorageValue(process.env.KV_REST_API_TOKEN)
-  ) {
+let cachedSql: QueryFn | null = null
+
+async function getSql(): Promise<QueryFn | null> {
+  if (cachedSql) {
+    return cachedSql
+  }
+
+  const url = process.env.DATABASE_URL
+  if (!url || isPlaceholderStorageValue(url)) {
     return null
   }
 
   try {
-    const { kv } = await import('@vercel/kv')
-    return kv
+    cachedSql = neon(url) as unknown as QueryFn
+    return cachedSql
   } catch {
     return null
   }
-}
-
-function threadIdsKey(userId: string) {
-  return `bag-v1:user:${userId}:threads`
-}
-
-function threadMetaKey(userId: string, chatId: string) {
-  return `bag-v1:user:${userId}:chat:${chatId}:meta`
-}
-
-function threadHistoryKey(userId: string, chatId: string) {
-  return `bag-v1:user:${userId}:chat:${chatId}:messages`
-}
-
-function activeThreadKey(userId: string) {
-  return `bag-v1:user:${userId}:active_chat`
-}
-
-function memoryKey(userId: string) {
-  return `bag-v1:user:${userId}:memory`
-}
-
-function safeParseEntries(raw: unknown): ChatEntry[] {
-  if (!Array.isArray(raw)) {
-    return []
-  }
-
-  return raw
-    .map((entry): ChatEntry | null => {
-      if (!entry || typeof entry !== 'object') {
-        return null
-      }
-
-      const item = entry as Partial<ChatEntry>
-      if (typeof item.role !== 'string' || typeof item.content !== 'string') {
-        return null
-      }
-
-      return {
-        role: item.role === 'assistant' ? 'assistant' : 'user',
-        content: item.content,
-        model: typeof item.model === 'string' ? item.model : DEFAULT_MODEL,
-        timestamp: typeof item.timestamp === 'string' ? item.timestamp : new Date().toISOString(),
-        userEmail: typeof item.userEmail === 'string' ? item.userEmail : undefined,
-      }
-    })
-    .filter((entry): entry is ChatEntry => Boolean(entry))
 }
 
 export function normalizeTitle(input: string) {
@@ -158,63 +117,74 @@ function deriveMemoryNote(userMessage: string, assistantMessage: string) {
   return normalizeTitle(user)
 }
 
-async function loadThreads(kv: Awaited<ReturnType<typeof getKvClient>>, userId: string) {
-  if (!kv) {
-    return []
-  }
-
-  const threadIds = (await kv.smembers(threadIdsKey(userId))) as string[]
-  if (!threadIds.length) {
-    return []
-  }
-
-  const threads = await Promise.all(
-    threadIds.map(async (chatId) => {
-      const thread = await kv.get<ConversationThread>(threadMetaKey(userId, chatId))
-      return thread
-    }),
-  )
-
-  return threads.filter((thread): thread is ConversationThread => Boolean(thread))
+type ThreadRow = {
+  id: string
+  user_id: string
+  title: string
+  created_at: Date
+  updated_at: Date
+  message_count: number
+  last_message_at: Date | null
+  last_message_preview: string | null
+  last_model: string | null
 }
 
-async function saveThread(kv: Awaited<ReturnType<typeof getKvClient>>, userId: string, thread: ConversationThread) {
-  if (!kv) {
-    return false
+function threadFromRow(row: ThreadRow): ConversationThread {
+  return {
+    id: row.id,
+    title: row.title,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+    messageCount: Number(row.message_count ?? 0),
+    lastMessageAt: row.last_message_at ? row.last_message_at.toISOString() : null,
+    lastMessagePreview: row.last_message_preview,
+    lastModel: row.last_model,
   }
-
-  await kv.set(threadMetaKey(userId, thread.id), thread)
-  await kv.sadd(threadIdsKey(userId), thread.id)
-  await kv.set(activeThreadKey(userId), thread.id)
-  await kv.sadd(USER_SET_KEY, userId)
-  return true
 }
 
-function trimThreads(threads: ConversationThread[]) {
-  return threads.sort((left, right) => {
-    const leftTime = Date.parse(left.updatedAt)
-    const rightTime = Date.parse(right.updatedAt)
-    return rightTime - leftTime
-  })
+async function ensureUser(sql: QueryFn, userId: string) {
+  await sql`
+    INSERT INTO bag_users (user_id)
+    VALUES (${userId})
+    ON CONFLICT (user_id) DO NOTHING
+  `
+}
+
+async function setActiveThread(sql: QueryFn, userId: string, chatId: string) {
+  await sql`
+    INSERT INTO bag_user_meta (user_id, active_thread_id)
+    VALUES (${userId}, ${chatId})
+    ON CONFLICT (user_id)
+    DO UPDATE SET active_thread_id = EXCLUDED.active_thread_id
+  `
 }
 
 export async function listConversations(userId: string) {
   try {
-    const kv = await getKvClient()
-    if (!kv) {
+    const sql = await getSql()
+    if (!sql) {
       return { storageAvailable: false, threads: [] as ConversationThread[], activeChatId: '' }
     }
 
-    const [threads, activeChatId] = await Promise.all([
-      loadThreads(kv, userId),
-      kv.get<string>(activeThreadKey(userId)),
+    const [threadRows, metaRows] = await Promise.all([
+      sql<ThreadRow[]>`
+        SELECT id, user_id, title, created_at, updated_at, message_count,
+               last_message_at, last_message_preview, last_model
+        FROM bag_threads
+        WHERE user_id = ${userId}
+        ORDER BY updated_at DESC
+      `,
+      sql<{ active_thread_id: string | null }[]>`
+        SELECT active_thread_id
+        FROM bag_user_meta
+        WHERE user_id = ${userId}
+      `,
     ])
 
-    return {
-      storageAvailable: true,
-      threads: trimThreads(threads),
-      activeChatId: activeChatId ?? '',
-    }
+    const threads = threadRows.map(threadFromRow)
+    const activeChatId = metaRows[0]?.active_thread_id ?? ''
+
+    return { storageAvailable: true, threads, activeChatId }
   } catch {
     return { storageAvailable: false, threads: [] as ConversationThread[], activeChatId: '' }
   }
@@ -227,82 +197,142 @@ export async function createConversationThread(
   model: string = DEFAULT_MODEL,
 ) {
   try {
-    const kv = await getKvClient()
-    if (!kv) {
+    const sql = await getSql()
+    if (!sql) {
       return { storageAvailable: false }
     }
 
-    const now = new Date().toISOString()
-    const existing = await kv.get<ConversationThread>(threadMetaKey(userId, chatId))
+    const now = new Date()
     const thread: ConversationThread = {
       id: chatId,
-      title: existing?.title ?? title,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      messageCount: existing?.messageCount ?? 0,
-      lastMessageAt: existing?.lastMessageAt ?? null,
-      lastMessagePreview: existing?.lastMessagePreview ?? null,
-      lastModel: existing?.lastModel ?? model,
+      title,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      messageCount: 0,
+      lastMessageAt: null,
+      lastMessagePreview: null,
+      lastModel: model,
     }
 
-    await saveThread(kv, userId, thread)
-    return { storageAvailable: true, thread }
+    await sql`
+      INSERT INTO bag_threads (
+        id, user_id, title, created_at, updated_at,
+        message_count, last_message_at, last_message_preview, last_model
+      )
+      VALUES (
+        ${chatId}, ${userId}, ${title}, ${now}, ${now},
+        0, NULL, NULL, ${model}
+      )
+      ON CONFLICT (id) DO NOTHING
+    `
+    await ensureUser(sql, userId)
+    await setActiveThread(sql, userId, chatId)
+
+    const saved = await sql<ThreadRow[]>`
+      SELECT id, user_id, title, created_at, updated_at,
+             message_count, last_message_at, last_message_preview, last_model
+      FROM bag_threads
+      WHERE id = ${chatId}
+    `
+
+    const createdThread: ConversationThread = {
+      ...thread,
+      ...(saved[0] ? threadFromRow(saved[0]) : null),
+    }
+    return { storageAvailable: true, thread: createdThread }
   } catch {
     return { storageAvailable: false }
   }
 }
 
+function trimThreads(threads: ConversationThread[]) {
+  return threads.sort((left, right) => {
+    const leftTime = Date.parse(left.updatedAt)
+    const rightTime = Date.parse(right.updatedAt)
+    return rightTime - leftTime
+  })
+}
+
 export async function appendConversationEntry(userId: string, chatId: string, entry: ChatEntry) {
   try {
-    const kv = await getKvClient()
-    if (!kv) {
+    const sql = await getSql()
+    if (!sql) {
       return { storageAvailable: false }
     }
 
-    const historyKey = threadHistoryKey(userId, chatId)
-    const current = safeParseEntries(await kv.get<ChatEntry[]>(historyKey))
-    const next = [...current, entry].slice(-80)
+    const timestamp = entry.timestamp || new Date().toISOString()
 
-    await kv.set(historyKey, next)
-    await kv.sadd(USER_SET_KEY, userId)
-    await kv.incr(CHAT_COUNT_KEY)
-    await kv.hincrby(MODEL_COUNTS_KEY, entry.model, 1)
+    await sql`
+      INSERT INTO bag_messages (
+        thread_id, user_id, role, content, model, message_time, user_email
+      )
+      VALUES (
+        ${chatId}, ${userId}, ${entry.role}, ${entry.content}, ${entry.model},
+        ${timestamp}::timestamptz, ${entry.userEmail ?? null}
+      )
+    `
+    await ensureUser(sql, userId)
 
-    const threadRaw = await kv.get<ConversationThread>(threadMetaKey(userId, chatId))
-    const existingThread = threadRaw ?? {
+    const firstUserMessage = await sql<{ content: string }[]>`
+      SELECT content
+      FROM bag_messages
+      WHERE thread_id = ${chatId} AND user_id = ${userId} AND role = 'user'
+      ORDER BY id ASC
+      LIMIT 1
+    `
+    const firstText = firstUserMessage[0]?.content ?? ''
+
+    const threadRaw = await sql<ThreadRow[]>`
+      SELECT id, user_id, title, created_at, updated_at,
+             message_count, last_message_at, last_message_preview, last_model
+      FROM bag_threads
+      WHERE id = ${chatId}
+    `
+    const existingThread = threadRaw[0] ? threadFromRow(threadRaw[0]) : threadFromRow({
       id: chatId,
+      user_id: userId,
       title: 'New chat',
-      createdAt: entry.timestamp,
-      updatedAt: entry.timestamp,
-      messageCount: 0,
-      lastMessageAt: null,
-      lastMessagePreview: null,
-      lastModel: entry.model,
-    }
+      created_at: new Date(),
+      updated_at: new Date(),
+      message_count: 0,
+      last_message_at: null,
+      last_message_preview: null,
+      last_model: entry.model,
+    })
 
-    const firstUserMessage = current.find((message) => message.role === 'user')?.content
     const updatedThread: ConversationThread = {
       ...existingThread,
       title:
         existingThread.title === 'New chat' && entry.role === 'user'
           ? normalizeTitle(entry.content)
-          : existingThread.title || normalizeTitle(firstUserMessage ?? entry.content),
-      updatedAt: entry.timestamp,
-      messageCount: next.length,
-      lastMessageAt: entry.timestamp,
+          : existingThread.title || normalizeTitle(firstText || entry.content),
+      updatedAt: timestamp,
+      messageCount: existingThread.messageCount + 1,
+      lastMessageAt: timestamp,
       lastMessagePreview: entry.content.slice(0, 120),
       lastModel: entry.model,
     }
 
-    await saveThread(kv, userId, updatedThread)
+    await sql`
+      UPDATE bag_threads
+      SET title = ${updatedThread.title},
+          updated_at = ${timestamp}::timestamptz,
+          message_count = ${updatedThread.messageCount},
+          last_message_at = ${timestamp}::timestamptz,
+          last_message_preview = ${updatedThread.lastMessagePreview},
+          last_model = ${updatedThread.lastModel}
+      WHERE id = ${chatId}
+    `
+    await ensureUser(sql, userId)
+    await setActiveThread(sql, userId, chatId)
 
     if (entry.role === 'assistant') {
-      const memoryText = deriveMemoryNote(firstUserMessage ?? '', entry.content)
+      const memoryText = deriveMemoryNote(firstText, entry.content)
       if (memoryText) {
         await appendMemoryNote(userId, {
           id: crypto.randomUUID(),
           text: memoryText,
-          createdAt: entry.timestamp,
+          createdAt: timestamp,
           sourceChatId: chatId,
         })
       }
@@ -316,15 +346,17 @@ export async function appendConversationEntry(userId: string, chatId: string, en
 
 export async function appendImagePrompt(userId: string, prompt: string, model: string, userEmail?: string) {
   try {
-    const kv = await getKvClient()
-    if (!kv) {
+    const sql = await getSql()
+    if (!sql) {
       return { storageAvailable: false }
     }
 
     const now = new Date().toISOString()
-    await kv.sadd(USER_SET_KEY, userId)
-    await kv.incr(IMAGE_COUNT_KEY)
-    await kv.hincrby(MODEL_COUNTS_KEY, model, 1)
+    await ensureUser(sql, userId)
+    await sql`
+      INSERT INTO bag_images (user_id, prompt, model, user_email, created_at)
+      VALUES (${userId}, ${prompt}, ${model}, ${userEmail ?? null}, ${now}::timestamptz)
+    `
 
     return { storageAvailable: true, prompt, model, userEmail: userEmail ?? '', timestamp: now }
   } catch {
@@ -332,21 +364,51 @@ export async function appendImagePrompt(userId: string, prompt: string, model: s
   }
 }
 
+function parseEntries(rows: Array<{ role: string; content: string; model: string; message_time: Date; user_email: string | null }>): ChatEntry[] {
+  return rows.map((row) => ({
+    role: row.role === 'assistant' ? 'assistant' : 'user',
+    content: row.content,
+    model: typeof row.model === 'string' && row.model ? row.model : DEFAULT_MODEL,
+    timestamp: row.message_time.toISOString(),
+    userEmail: row.user_email ?? undefined,
+  }))
+}
+
 export async function getConversationHistory(userId: string, chatId?: string) {
   try {
-    const kv = await getKvClient()
-    if (!kv) {
+    const sql = await getSql()
+    if (!sql) {
       return { storageAvailable: false, entries: [] as ChatEntry[] }
     }
 
-    const activeChatId = chatId?.trim() || (await kv.get<string>(activeThreadKey(userId))) || ''
+    let activeChatId = chatId?.trim() || ''
+    if (!activeChatId) {
+      const meta = await sql<{ active_thread_id: string | null }[]>`
+        SELECT active_thread_id
+        FROM bag_user_meta
+        WHERE user_id = ${userId}
+      `
+      activeChatId = meta[0]?.active_thread_id ?? ''
+    }
+
     if (!activeChatId) {
       return { storageAvailable: true, entries: [] as ChatEntry[] }
     }
 
-    const raw = await kv.get<ChatEntry[]>(threadHistoryKey(userId, activeChatId))
-    const entries = safeParseEntries(raw)
-    return { storageAvailable: true, entries }
+    const rows = await sql<Array<{
+      role: string
+      content: string
+      model: string
+      message_time: Date
+      user_email: string | null
+    }>>`
+      SELECT role, content, model, message_time, user_email
+      FROM bag_messages
+      WHERE thread_id = ${activeChatId} AND user_id = ${userId}
+      ORDER BY id ASC
+    `
+
+    return { storageAvailable: true, entries: parseEntries(rows) }
   } catch {
     return { storageAvailable: false, entries: [] as ChatEntry[] }
   }
@@ -354,32 +416,38 @@ export async function getConversationHistory(userId: string, chatId?: string) {
 
 export async function getUserMemory(userId: string) {
   try {
-    const kv = await getKvClient()
-    if (!kv) {
+    const sql = await getSql()
+    if (!sql) {
       return { storageAvailable: false, items: [] as MemoryItem[] }
     }
 
-    const raw = await kv.lrange(memoryKey(userId), 0, 49)
-    const items = (raw ?? [])
+    const rows = await sql<{ items: unknown }[]>`
+      SELECT items
+      FROM bag_memory
+      WHERE user_id = ${userId}
+    `
+    const raw = rows[0]?.items
+
+    if (!Array.isArray(raw)) {
+      return { storageAvailable: true, items: [] as MemoryItem[] }
+    }
+
+    const items = (raw as unknown[])
       .map((entry): MemoryItem | null => {
-        if (typeof entry !== 'string') {
+        if (!entry || typeof entry !== 'object') {
           return null
         }
 
-        try {
-          const parsed = JSON.parse(entry) as Partial<MemoryItem>
-          if (typeof parsed.id !== 'string' || typeof parsed.text !== 'string') {
-            return null
-          }
-
-          return {
-            id: parsed.id,
-            text: parsed.text,
-            createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
-            sourceChatId: typeof parsed.sourceChatId === 'string' ? parsed.sourceChatId : '',
-          }
-        } catch {
+        const parsed = entry as Partial<MemoryItem>
+        if (typeof parsed.id !== 'string' || typeof parsed.text !== 'string') {
           return null
+        }
+
+        return {
+          id: parsed.id,
+          text: parsed.text,
+          createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
+          sourceChatId: typeof parsed.sourceChatId === 'string' ? parsed.sourceChatId : '',
         }
       })
       .filter((entry): entry is MemoryItem => Boolean(entry))
@@ -393,28 +461,36 @@ export async function getUserMemory(userId: string) {
 
 export async function appendMemoryNote(userId: string, note: MemoryItem) {
   try {
-    const kv = await getKvClient()
-    if (!kv) {
+    const sql = await getSql()
+    if (!sql) {
       return { storageAvailable: false }
     }
 
-    const existing = await kv.lrange(memoryKey(userId), 0, 49)
-    const deduped = (existing ?? []).filter((entry) => {
-      if (typeof entry !== 'string') {
+    const rows = await sql<{ items: unknown }[]>`
+      SELECT items
+      FROM bag_memory
+      WHERE user_id = ${userId}
+    `
+    const raw = rows[0]?.items
+    const existing = Array.isArray(raw) ? (raw as unknown[]) : []
+
+    const deduped = existing.filter((entry) => {
+      if (!entry || typeof entry !== 'object') {
         return true
       }
 
-      try {
-        const parsed = JSON.parse(entry) as Partial<MemoryItem>
-        return parsed.text?.trim().toLowerCase() !== note.text.trim().toLowerCase()
-      } catch {
-        return true
-      }
+      const parsed = entry as Partial<MemoryItem>
+      return parsed.text?.trim().toLowerCase() !== note.text.trim().toLowerCase()
     })
 
-    await kv.del(memoryKey(userId))
-    await kv.rpush(memoryKey(userId), ...deduped, JSON.stringify(note))
-    await kv.ltrim(memoryKey(userId), 0, 24)
+    const next = [...deduped, note].slice(-25)
+
+    await sql`
+      INSERT INTO bag_memory (user_id, items, updated_at)
+      VALUES (${userId}, ${JSON.stringify(next)}::jsonb, now())
+      ON CONFLICT (user_id)
+      DO UPDATE SET items = EXCLUDED.items, updated_at = now()
+    `
 
     return { storageAvailable: true }
   } catch {
@@ -438,49 +514,86 @@ export type AdminOverview = {
   }>
 }
 
+type OverviewCountsRow = {
+  chat_count: string
+  image_count: string
+  model_counts: Record<string, number> | null
+}
+
 export async function getAdminOverview(): Promise<AdminOverview> {
   try {
-    const kv = await getKvClient()
-    if (!kv) {
+    const sql = await getSql()
+    if (!sql) {
       return {
         storageAvailable: false,
-        stats: {
-          chatCount: 0,
-          imageCount: 0,
-          userCount: 0,
-          modelCounts: {},
-        },
+        stats: { chatCount: 0, imageCount: 0, userCount: 0, modelCounts: {} },
         users: [],
       }
     }
 
-    const [chatCountRaw, imageCountRaw, modelCountsRaw, userIds] = await Promise.all([
-      kv.get<number>(CHAT_COUNT_KEY),
-      kv.get<number>(IMAGE_COUNT_KEY),
-      kv.hgetall<Record<string, number>>(MODEL_COUNTS_KEY),
-      kv.smembers(USER_SET_KEY),
+    const [counts, userRows] = await Promise.all([
+      sql<OverviewCountsRow[]>`
+        SELECT
+          (SELECT COUNT(*)::int FROM bag_messages)::text AS chat_count,
+          (SELECT COUNT(*)::int FROM bag_images)::text AS image_count,
+          COALESCE((
+            SELECT jsonb_object_agg(model, total)::jsonb
+            FROM (
+              SELECT model, COUNT(*)::int AS total
+              FROM (
+                SELECT model FROM bag_messages
+                UNION ALL
+                SELECT model FROM bag_images
+              ) all_models
+              GROUP BY model
+            ) agg
+          ), '{}'::jsonb) AS model_counts
+      `,
+      sql<{ user_id: string }[]>`
+        SELECT DISTINCT user_id
+        FROM (
+          SELECT user_id FROM bag_users
+        ) u
+        ORDER BY user_id ASC
+      `,
     ])
 
+    const chatCount = Number(counts[0]?.chat_count ?? 0)
+    const imageCount = Number(counts[0]?.image_count ?? 0)
+    const modelCountsRaw = counts[0]?.model_counts ?? {}
+
+    const modelCounts: Record<string, number> = {}
+    for (const [modelName, count] of Object.entries(modelCountsRaw)) {
+      modelCounts[modelName] = Number(count)
+    }
+
+    const userIds = userRows.map((row) => row.user_id)
+
     const users = await Promise.all(
-      (userIds as string[]).map(async (userId) => {
-        const threads = trimThreads(await loadThreads(kv, userId))
-        const histories = await Promise.all(
-          threads.map(async (thread) => ({
-            thread,
-            history: safeParseEntries(await kv.lrange(threadHistoryKey(userId, thread.id), 0, 49)),
-          })),
-        )
-
-        const lastHistory = histories
-          .flatMap((item) => item.history.map((entry) => ({ ...entry, threadId: item.thread.id })))
-          .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp))[0] ?? null
-
-        const totalMessages = histories.reduce((sum, item) => sum + item.history.length, 0)
+      userIds.map(async (currentUserId) => {
+        const [agg] = await sql<Array<{
+          count: string
+          last_time: Date | null
+          last_model: string | null
+        }>>`
+          SELECT
+            COUNT(*)::int::text AS count,
+            MAX(message_time) AS last_time,
+            (SELECT m2.model
+             FROM bag_messages m2
+             WHERE m2.user_id = ${currentUserId}
+             ORDER BY m2.message_time DESC, m2.id DESC
+             LIMIT 1) AS last_model
+          FROM bag_messages m
+          WHERE m.user_id = ${currentUserId}
+        `
+        const messageCount = Number(agg?.count ?? 0)
+        const lastActivityAt = agg?.last_time ? agg.last_time.toISOString() : null
         return {
-          userId,
-          messageCount: totalMessages,
-          lastActivityAt: lastHistory?.timestamp ?? null,
-          lastModel: lastHistory?.model ?? null,
+          userId: currentUserId,
+          messageCount,
+          lastActivityAt,
+          lastModel: agg?.last_model ?? null,
         }
       }),
     )
@@ -494,22 +607,17 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     return {
       storageAvailable: true,
       stats: {
-        chatCount: Number(chatCountRaw ?? 0),
-        imageCount: Number(imageCountRaw ?? 0),
+        chatCount,
+        imageCount,
         userCount: userIds.length,
-        modelCounts: modelCountsRaw ?? {},
+        modelCounts,
       },
       users,
     }
   } catch {
     return {
       storageAvailable: false,
-      stats: {
-        chatCount: 0,
-        imageCount: 0,
-        userCount: 0,
-        modelCounts: {},
-      },
+      stats: { chatCount: 0, imageCount: 0, userCount: 0, modelCounts: {} },
       users: [],
     }
   }
