@@ -511,6 +511,7 @@ export type AdminOverview = {
     messageCount: number
     lastActivityAt: string | null
     lastModel: string | null
+    lastEmail: string | null
   }>
 }
 
@@ -575,6 +576,7 @@ export async function getAdminOverview(): Promise<AdminOverview> {
           count: string
           last_time: Date | null
           last_model: string | null
+          last_email: string | null
         }>>`
           SELECT
             COUNT(*)::int::text AS count,
@@ -583,7 +585,13 @@ export async function getAdminOverview(): Promise<AdminOverview> {
              FROM bag_messages m2
              WHERE m2.user_id = ${currentUserId}
              ORDER BY m2.message_time DESC, m2.id DESC
-             LIMIT 1) AS last_model
+             LIMIT 1) AS last_model,
+            (SELECT m2.user_email
+             FROM bag_messages m2
+             WHERE m2.user_id = ${currentUserId}
+               AND m2.user_email IS NOT NULL
+             ORDER BY m2.message_time DESC, m2.id DESC
+             LIMIT 1) AS last_email
           FROM bag_messages m
           WHERE m.user_id = ${currentUserId}
         `
@@ -594,6 +602,7 @@ export async function getAdminOverview(): Promise<AdminOverview> {
           messageCount,
           lastActivityAt,
           lastModel: agg?.last_model ?? null,
+          lastEmail: agg?.last_email ?? null,
         }
       }),
     )

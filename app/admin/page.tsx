@@ -20,6 +20,7 @@ type AdminOverview = {
     messageCount: number
     lastActivityAt: string | null
     lastModel: string | null
+    lastEmail: string | null
   }>
 }
 
@@ -192,6 +193,7 @@ export default function AdminPage() {
                     <thead>
                       <tr>
                         <th>User ID</th>
+                        <th>Email</th>
                         <th>Messages</th>
                         <th>Last activity</th>
                         <th>Last model</th>
@@ -200,7 +202,7 @@ export default function AdminPage() {
                     <tbody>
                       {overview.users.length === 0 ? (
                         <tr>
-                          <td colSpan={4}>No users yet.</td>
+                          <td colSpan={5}>No users yet.</td>
                         </tr>
                       ) : (
                         overview.users.map((user) => (
@@ -208,6 +210,7 @@ export default function AdminPage() {
                             <td>
                               <code>{user.userId}</code>
                             </td>
+                            <td>{user.lastEmail ?? 'n/a'}</td>
                             <td>{user.messageCount}</td>
                             <td>{user.lastActivityAt ?? 'n/a'}</td>
                             <td>{user.lastModel ?? 'n/a'}</td>
