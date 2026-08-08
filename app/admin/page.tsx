@@ -160,7 +160,7 @@ export default function AdminPage() {
               </div>
               <div className="stat">
                 <Database size={18} />
-                <strong>{overview.storageAvailable ? 'KV on' : 'KV off'}</strong>
+                <strong>{overview.storageAvailable ? 'Storage on' : 'Storage off'}</strong>
                 <span>Persistence</span>
               </div>
             </div>
