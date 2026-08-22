@@ -1,11 +1,12 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, BarChart3, Database, ImageIcon, MessageSquare, RefreshCcw, Shield, Users } from 'lucide-react'
+import { ArrowLeft, Database, ImageIcon, MessageSquare, RefreshCcw, Shield, Users } from 'lucide-react'
 import type { SessionUser } from '@/lib/auth'
 import { apiUrl } from '@/lib/client-config'
 import { EmailOTPAuth } from '@/components/email-otp-auth'
+import { ModelUsageChart } from '@/components/model-usage-chart'
 
 type AdminOverview = {
   storageAvailable: boolean
@@ -83,11 +84,6 @@ export default function AdminPage() {
 
     await loadOverview()
   }
-
-  const totalModels = useMemo(() => {
-    if (!overview) return []
-    return Object.entries(overview.stats.modelCounts).sort((a, b) => b[1] - a[1])
-  }, [overview])
 
   return (
     <main className="app-shell admin-shell">
@@ -167,22 +163,7 @@ export default function AdminPage() {
             </div>
 
             <div className="admin-content-grid">
-              <section className="panel admin-panel">
-                <div>
-                  <div className="section-title"><BarChart3 size={16} /> Model usage</div>
-                </div>
-                <div className="quick-prompts">
-                  {totalModels.length === 0 ? (
-                    <span className="pill">No model data yet</span>
-                  ) : (
-                    totalModels.map(([modelName, count]) => (
-                      <span key={modelName} className="pill">
-                        {modelName}: {count}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </section>
+              <ModelUsageChart modelCounts={overview.stats.modelCounts} />
 
               <section className="panel admin-panel">
                 <div>

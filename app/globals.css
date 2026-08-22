@@ -1969,6 +1969,231 @@ body {
   overflow-x: auto;
 }
 
+/* 3D model usage chart */
+.chart3d {
+  padding: 14px 8px 6px;
+  border-radius: 8px;
+  overflow-x: auto;
+  background:
+    radial-gradient(130% 100% at 50% 115%, rgba(16, 163, 127, 0.1), transparent 62%),
+    rgba(9, 11, 15, 0.55);
+}
+
+.chart3d-bars {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: clamp(10px, 3%, 28px);
+  height: 250px;
+  min-width: min-content;
+  padding: 30px 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.chart3d-bars::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to top,
+    rgba(255, 255, 255, 0.05) 0 1px,
+    transparent 1px 50px
+  );
+  pointer-events: none;
+}
+
+.chart3d-slot {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-width: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chart3d-value {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--c) 65%, transparent);
+  transition: transform 0.2s ease;
+}
+
+.chart3d-bar {
+  position: relative;
+  width: 46px;
+  height: 100%;
+  outline: none;
+  cursor: default;
+  transform-origin: bottom center;
+  filter: drop-shadow(0 6px 16px color-mix(in srgb, var(--c) 35%, transparent));
+  animation: chart3d-rise 0.7s cubic-bezier(0.22, 1.2, 0.36, 1) both;
+  animation-delay: var(--delay);
+  transition: filter 0.25s ease;
+}
+
+@keyframes chart3d-rise {
+  from {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.chart3d-front,
+.chart3d-cap,
+.chart3d-side {
+  position: absolute;
+  display: block;
+}
+
+.chart3d-front {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--h);
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--c) 82%, #ffffff 10%),
+    color-mix(in srgb, var(--c) 68%, #000000 34%)
+  );
+  overflow: hidden;
+}
+
+.chart3d-front::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.32) 50%,
+    transparent 66%
+  );
+  transform: translateX(-130%);
+  animation: chart3d-sheen 4.6s ease-in-out infinite;
+  animation-delay: calc(var(--delay) + 1s);
+}
+
+@keyframes chart3d-sheen {
+  0%,
+  55% {
+    transform: translateX(-130%);
+  }
+  78%,
+  100% {
+    transform: translateX(135%);
+  }
+}
+
+.chart3d-cap {
+  left: 0;
+  right: 0;
+  bottom: var(--h);
+  height: 13px;
+  border-radius: 2px 0 0 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--c) 80%, #ffffff),
+    color-mix(in srgb, var(--c) 55%, #ffffff 22%)
+  );
+  transform: skewX(-45deg);
+  transform-origin: bottom left;
+}
+
+.chart3d-side {
+  left: 100%;
+  bottom: 0;
+  width: 13px;
+  height: var(--h);
+  border-radius: 0 0 2px 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--c) 58%, #000000),
+    color-mix(in srgb, var(--c) 32%, #000000 58%)
+  );
+  transform: skewY(-45deg);
+  transform-origin: top left;
+}
+
+.chart3d-slot:hover {
+  z-index: 3;
+}
+
+.chart3d-slot:hover .chart3d-bar,
+.chart3d-bar:focus-visible {
+  filter: drop-shadow(0 12px 24px color-mix(in srgb, var(--c) 60%, transparent));
+}
+
+.chart3d-slot:hover .chart3d-front,
+.chart3d-slot:hover .chart3d-cap,
+.chart3d-slot:hover .chart3d-side {
+  filter: brightness(1.16) saturate(1.12);
+}
+
+.chart3d-slot:hover .chart3d-value {
+  transform: translateY(-2px) scale(1.1);
+}
+
+.chart3d-bar::before {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(var(--h) + 42px);
+  left: 50%;
+  transform: translate(-50%, 6px);
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(13, 20, 40, 0.96);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 6;
+}
+
+.chart3d-slot:hover .chart3d-bar::before,
+.chart3d-bar:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.chart3d-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.chart3d-axis {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 6px 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart3d-bar,
+  .chart3d-front::after {
+    animation: none;
+  }
+}
+
 @media (max-width: 1180px) {
   .workspace-grid {
     grid-template-columns: 260px minmax(0, 1fr);
