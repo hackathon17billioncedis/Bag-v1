@@ -34,6 +34,13 @@ Avoid overexplaining unless the user asks for detail.`
 
 export const MODEL_OPTIONS: ModelOption[] = [
   {
+    id: 'stealth/ox-alpha',
+    label: 'Stealth OX Alpha',
+    category: 'OpenRouter',
+    description: 'Stealth OX Alpha model via OpenRouter.',
+    bestFor: 'Advanced reasoning & coding',
+  },
+  {
     id: 'meta-llama/llama-3.1-8b-instruct',
     label: 'Llama 3.1 8B',
     category: 'Llama',
