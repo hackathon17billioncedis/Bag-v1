@@ -111,6 +111,13 @@ export const MODEL_OPTIONS: ModelOption[] = [
     bestFor: 'Maximum capability',
   },
   {
+    id: 'nvidia/nemotron-3.5-lightning:free',
+    label: 'Nemotron 3.5 Lightning (Free)',
+    category: 'NVIDIA',
+    description: 'Free fast Nemotron model via OpenRouter.',
+    bestFor: 'Fast general chat',
+  },
+  {
     id: 'nvidia/nemotron-3-super-120b-a12b',
     label: 'Nemotron-3 Super 120B',
     category: 'NVIDIA',
