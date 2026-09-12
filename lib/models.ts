@@ -31,6 +31,8 @@ export const DEFAULT_MODEL =
 export const DEFAULT_IMAGE_MODEL = 'black-forest-labs/FLUX.1-dev'
 export const DEFAULT_TTS_MODEL = 'nvidia/magpie-tts-multilingual'
 export const DEFAULT_VIDEO_MODEL = 'nvidia/cosmos3-nano'
+export const DEFAULT_STT_MODEL = 'openai/whisper-large-v3'
+export const FALLBACK_STT_MODEL = 'qwen/qwen3-asr-0.6b'
 
 export const SYSTEM_PROMPT = `You are ${APP_NAME}, a warm, helpful AI assistant.
 Think briefly before answering, then respond in a calm, professional, and natural way.
