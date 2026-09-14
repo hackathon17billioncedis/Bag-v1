@@ -153,6 +153,8 @@ export default function HomePage() {
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true)
 
   const [ttsModel, setTtsModel] = useState(DEFAULT_TTS_MODEL)
+  const [isVoiceMode, setIsVoiceMode] = useState(false)
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false)
   const [attachments, setAttachments] = useState<UploadedFile[]>([])
   const [canvasText, setCanvasText] = useState('')
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in')
@@ -162,6 +164,10 @@ export default function HomePage() {
   const recognitionRef = useRef<VoiceRecognition | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const canvasRef = useRef<HTMLTextAreaElement | null>(null)
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null)
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null)
+  const voiceChunksRef = useRef<Blob[]>([])
+  const voiceStreamRef = useRef<MediaStream | null>(null)
 
   const currentModel = useMemo(() => getModelOption(model), [model])
   const modelOptions = useMemo(() => getModelOptions(), [])
@@ -473,7 +479,17 @@ export default function HomePage() {
     }
   }, [])
 
-  const speak = async (text: string) => {
+  const stopVoicePlayback = () => {
+    const audio = voiceAudioRef.current
+    if (audio) {
+      audio.pause()
+      URL.revokeObjectURL(audio.src)
+      voiceAudioRef.current = null
+    }
+    setIsSpeaking(false)
+  }
+
+  const speak = async (text: string, voiceModel?: string) => {
     if (!text.trim() || isSpeaking) {
       return
     }
@@ -483,20 +499,44 @@ export default function HomePage() {
       const response = await fetch(apiUrl('/api/tts'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, model: ttsModel }),
+        body: JSON.stringify({ text, model: voiceModel ?? ttsModel }),
       })
       if (!response.ok) {
         throw new Error('TTS request failed')
       }
       const blob = await response.blob()
       const audio = new Audio(URL.createObjectURL(blob))
-      audio.onended = () => setIsSpeaking(false)
-      audio.onerror = () => setIsSpeaking(false)
+      voiceAudioRef.current = audio
+      audio.onended = () => {
+        if (voiceAudioRef.current === audio) {
+          voiceAudioRef.current = null
+        }
+        setIsSpeaking(false)
+      }
+      audio.onerror = () => {
+        if (voiceAudioRef.current === audio) {
+          voiceAudioRef.current = null
+        }
+        setIsSpeaking(false)
+      }
       await audio.play()
     } catch {
+      voiceAudioRef.current = null
       setIsSpeaking(false)
     }
   }
+
+  const stripMarkdownForSpeech = (markdown: string) =>
+    markdown
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]*)`/g, '$1')
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+      .replace(/^(\s*[-*+]\s+|\s*\d+[.)]\s+)/gm, '')
+      .replace(/[*_~>|#]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
 
   const startListening = () => {
     const speechWindow = window as WindowWithSpeech
@@ -543,6 +583,122 @@ export default function HomePage() {
     }
 
     startListening()
+  }
+
+  const VOICE_CONVERSATION_MODEL = 'deepgram/flux-tts:free'
+  const MAX_VOICE_TURN_MS = 30000
+
+  const stopVoiceRecording = () => {
+    voiceRecorderRef.current?.stop()
+    voiceRecorderRef.current = null
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+    voiceStreamRef.current = null
+    setIsRecordingVoice(false)
+  }
+
+  const setVoiceMode = (enabled: boolean) => {
+    if (!enabled) {
+      if (isRecordingVoice) {
+        // Discard the partial turn — clear chunks before stop() fires onstop.
+        voiceChunksRef.current = []
+        stopVoiceRecording()
+      }
+      stopVoicePlayback()
+      setIsVoiceMode(false)
+      return
+    }
+    // Entering voice mode — default the conversation voice to Flux.
+    setTtsModel(VOICE_CONVERSATION_MODEL)
+    setError('')
+    setIsVoiceMode(true)
+  }
+
+  const startVoiceTurn = async () => {
+    // Mic-press-stops-playback (barge-in).
+    if (isSpeaking) {
+      stopVoicePlayback()
+    }
+    if (isRecordingVoice || isSending) {
+      return
+    }
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      setError('Microphone access was denied.')
+      return
+    }
+
+    const recorder = new MediaRecorder(stream)
+    voiceChunksRef.current = []
+    voiceStreamRef.current = stream
+    voiceRecorderRef.current = recorder
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        voiceChunksRef.current.push(event.data)
+      }
+    }
+    recorder.onstop = () => {
+      void finishVoiceTurn()
+    }
+
+    setError('')
+    setIsRecordingVoice(true)
+    recorder.start()
+    // Hard cap per turn.
+    window.setTimeout(() => {
+      if (voiceRecorderRef.current === recorder) {
+        stopVoiceRecording()
+      }
+    }, MAX_VOICE_TURN_MS)
+  }
+
+  const finishVoiceTurn = async () => {
+    const chunks = voiceChunksRef.current
+    voiceChunksRef.current = []
+    voiceRecorderRef.current = null
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+    voiceStreamRef.current = null
+    setIsRecordingVoice(false)
+
+    const blob = new Blob(chunks, { type: 'audio/webm' })
+    if (blob.size === 0) {
+      return
+    }
+
+    try {
+      const form = new FormData()
+      form.set('file', new File([blob], 'voice-turn.webm', { type: 'audio/webm' }))
+      const response = await fetch(apiUrl('/api/stt'), {
+        method: 'POST',
+        body: form,
+      })
+      const payload = (await response.json().catch(() => ({}))) as {
+        text?: string
+        error?: string
+      }
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Transcription failed.')
+      }
+      const transcript = (payload.text ?? '').trim()
+      if (!transcript) {
+        setError('Did not catch that — press the mic and try again.')
+        return
+      }
+      await submitChat(transcript)
+    } catch (voiceError) {
+      setError(voiceError instanceof Error ? voiceError.message : 'Voice turn failed.')
+    }
+  }
+
+  const toggleVoiceTurn = () => {
+    if (isRecordingVoice) {
+      stopVoiceRecording()
+      return
+    }
+    void startVoiceTurn()
   }
 
   const openFilePicker = () => {
@@ -597,6 +753,13 @@ export default function HomePage() {
         if (reply) {
           setMessages((current) => [...current, { role: 'assistant', content: reply }])
           setCanvasText(reply)
+          // Voice mode: auto-speak every reply.
+          if (isVoiceMode) {
+            const speech = stripMarkdownForSpeech(reply)
+            if (speech) {
+              void speak(speech)
+            }
+          }
         }
         if (outboundAttachments.length > 0) {
           clearAttachments()
@@ -659,6 +822,13 @@ export default function HomePage() {
 
       if (finalReply) {
         setCanvasText(finalReply)
+        // Voice mode: auto-speak every reply.
+        if (isVoiceMode) {
+          const speech = stripMarkdownForSpeech(finalReply)
+          if (speech) {
+            void speak(speech)
+          }
+        }
       }
 
       if (outboundAttachments.length > 0) {
@@ -1190,14 +1360,49 @@ export default function HomePage() {
               />
               <div className="composer-send-stack">
                 <button
-                  className="icon-button"
+                  className={`icon-button${isVoiceMode && isRecordingVoice ? ' recording' : ''}`}
                   type="button"
-                  onClick={toggleListening}
-                  aria-label={isListening ? 'Stop dictation' : 'Start dictation'}
+                  onClick={isVoiceMode ? toggleVoiceTurn : toggleListening}
+                  aria-label={
+                    isVoiceMode
+                      ? isRecordingVoice
+                        ? 'Stop recording and send voice turn'
+                        : isSpeaking
+                          ? 'Interrupt reply and start recording'
+                          : 'Start voice turn'
+                      : isListening
+                        ? 'Stop dictation'
+                        : 'Start dictation'
+                  }
                 >
-                  {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+                  {isVoiceMode ? (
+                    isRecordingVoice || isSpeaking ? <MicOff size={16} /> : <Mic size={16} />
+                  ) : isListening ? (
+                    <MicOff size={16} />
+                  ) : (
+                    <Mic size={16} />
+                  )}
                 </button>
                 <div className="tts-row">
+                  <button
+                    className={`chip${isVoiceMode ? ' chip-active' : ''}`}
+                    type="button"
+                    onClick={() => {
+                      if (isVoiceMode) {
+                        setVoiceMode(false)
+                        return
+                      }
+                      if (!canUseAdvancedTools) {
+                        setError('Sign in to use voice conversation.')
+                        return
+                      }
+                      setVoiceMode(true)
+                    }}
+                    aria-label={isVoiceMode ? 'Exit voice conversation' : 'Start voice conversation'}
+                    aria-pressed={isVoiceMode}
+                  >
+                    Voice
+                  </button>
                   <button
                     className="icon-button"
                     type="button"
