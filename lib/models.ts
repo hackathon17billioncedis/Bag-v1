@@ -28,9 +28,7 @@ export const DEFAULT_MODEL =
       process.env.OPENROUTER_MODEL ??
       'meta-llama/llama-3.1-8b-instruct',
   )
-export const DEFAULT_IMAGE_MODEL = 'black-forest-labs/FLUX.1-dev'
 export const DEFAULT_TTS_MODEL = 'nvidia/magpie-tts-multilingual'
-export const DEFAULT_VIDEO_MODEL = 'nvidia/cosmos3-nano'
 export const DEFAULT_STT_MODEL = 'openai/whisper-large-v3'
 export const FALLBACK_STT_MODEL = 'qwen/qwen3-asr-0.6b'
 
@@ -205,37 +203,6 @@ export const MODEL_OPTIONS: ModelOption[] = [
   },
 ]
 
-export const IMAGE_MODEL_OPTIONS: ModelOption[] = [
-  {
-    id: 'black-forest-labs/FLUX.1-dev',
-    label: 'FLUX.1-dev',
-    category: 'Image',
-    description: 'Highest quality FLUX image generation.',
-    bestFor: 'Detailed, high-quality images',
-  },
-  {
-    id: 'black-forest-labs/FLUX.1-schnell',
-    label: 'FLUX.1-schnell',
-    category: 'Image',
-    description: 'Fast distilled FLUX variant.',
-    bestFor: 'Quick image generation',
-  },
-  {
-    id: 'black-forest-labs/flux.2-klein-4b',
-    label: 'FLUX.2 Klein 4B',
-    category: 'Image',
-    description: 'Efficient FLUX.2 variant.',
-    bestFor: 'Balanced quality & speed',
-  },
-  {
-    id: 'google/diffusiongemma-26b-a4b-it',
-    label: 'DiffusionGemma 26B',
-    category: 'Image',
-    description: 'Google open diffusion model.',
-    bestFor: 'Experimental image gen',
-  },
-]
-
 export const TTS_MODEL_OPTIONS: ModelOption[] = [
   {
     id: 'nvidia/magpie-tts-multilingual',
@@ -251,15 +218,19 @@ export const TTS_MODEL_OPTIONS: ModelOption[] = [
     description: '23-language TTS with voice cloning.',
     bestFor: 'Expressive multilingual speech',
   },
-]
-
-export const VIDEO_MODEL_OPTIONS: ModelOption[] = [
   {
-    id: 'nvidia/cosmos3-nano',
-    label: 'Cosmos3 Nano',
-    category: 'Video',
-    description: 'Physics-aware text-to-video generation.',
-    bestFor: 'Text & image to video',
+    id: 'deepgram/flux-tts:free',
+    label: 'Flux TTS (Free)',
+    category: 'TTS',
+    description: 'Free conversation-aware Deepgram voice via OpenRouter.',
+    bestFor: 'Conversational voice output',
+  },
+  {
+    id: 'fish-audio/s2.1-pro-free:free',
+    label: 'S2.1 Pro Free (Free)',
+    category: 'TTS',
+    description: 'Free Fish Audio multilingual voice via OpenRouter.',
+    bestFor: 'Multilingual voice output',
   },
 ]
 

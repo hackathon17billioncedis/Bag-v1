@@ -1,5 +1,4 @@
 'use client'
-/* eslint-disable @next/next/no-img-element */
 
 import { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -17,10 +16,8 @@ import {
   Menu,
   RefreshCcw,
   Search,
-  Sparkles,
   ThumbsDown,
   ThumbsUp,
-  Video,
   Volume2,
   X,
 } from 'lucide-react'
@@ -28,7 +25,7 @@ import Image from 'next/image'
 import { EmailOTPAuth } from '@/components/email-otp-auth'
 import { apiUrl } from '@/lib/client-config'
 import type { SessionUser } from '@/lib/auth'
-import { APP_NAME, DEFAULT_IMAGE_MODEL, DEFAULT_MODEL, DEFAULT_TTS_MODEL, DEFAULT_VIDEO_MODEL, getModelOption, getModelOptions, IMAGE_MODEL_OPTIONS, TTS_MODEL_OPTIONS, VIDEO_MODEL_OPTIONS, type ModelOption } from '@/lib/models'
+import { APP_NAME, DEFAULT_MODEL, DEFAULT_TTS_MODEL, getModelOption, getModelOptions, TTS_MODEL_OPTIONS, type ModelOption } from '@/lib/models'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -148,24 +145,14 @@ export default function HomePage() {
   const [isAuthMenuOpen, setIsAuthMenuOpen] = useState(false)
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false)
-  const [activeToolPanel, setActiveToolPanel] = useState<'canvas' | 'image' | 'video' | null>(null)
+  const [activeToolPanel, setActiveToolPanel] = useState<'canvas' | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [chatId, setChatId] = useState('')
   const [threads, setThreads] = useState<ConversationThread[]>([])
   const [memory, setMemory] = useState<MemoryItem[]>([])
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true)
 
-  const [imagePrompt, setImagePrompt] = useState('A sleek futuristic AI assistant dashboard')
-  const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL)
-  const [imageUrl, setImageUrl] = useState('')
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
-  const [imageError, setImageError] = useState('')
   const [ttsModel, setTtsModel] = useState(DEFAULT_TTS_MODEL)
-  const [videoPrompt, setVideoPrompt] = useState('')
-  const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL)
-  const [videoUrl, setVideoUrl] = useState('')
-  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false)
-  const [videoError, setVideoError] = useState('')
   const [attachments, setAttachments] = useState<UploadedFile[]>([])
   const [canvasText, setCanvasText] = useState('')
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in')
@@ -175,7 +162,6 @@ export default function HomePage() {
   const recognitionRef = useRef<VoiceRecognition | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const canvasRef = useRef<HTMLTextAreaElement | null>(null)
-  const imageRef = useRef<HTMLTextAreaElement | null>(null)
 
   const currentModel = useMemo(() => getModelOption(model), [model])
   const modelOptions = useMemo(() => getModelOptions(), [])
@@ -274,11 +260,6 @@ export default function HomePage() {
     setInput('')
     setError('')
     setCanvasText('')
-    setImageUrl('')
-    setImageError('')
-    setVideoUrl('')
-    setVideoPrompt('')
-    setVideoError('')
     setActiveToolPanel(null)
 
     if (!sessionUser?.id) {
@@ -381,8 +362,6 @@ export default function HomePage() {
           setInput('')
           setWebSearchEnabled(false)
           setModel(DEFAULT_MODEL)
-          setImagePrompt('A sleek futuristic AI assistant dashboard')
-          setImageUrl('')
           setCanvasText('')
           setActiveToolPanel(null)
           setIsWorkspaceLoading(false)
@@ -820,96 +799,6 @@ export default function HomePage() {
     saveBlob(blob, `${baseName}.docx`)
   }
 
-  const generateImage = async () => {
-    if (!canUseAdvancedTools) {
-      setImageError('Sign in to use image generation.')
-      return
-    }
-
-    const prompt = imagePrompt.trim()
-    if (!prompt || isGeneratingImage) {
-      return
-    }
-
-    setIsGeneratingImage(true)
-    setImageError('')
-
-    try {
-      const response = await fetch(apiUrl('/api/image'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ prompt, model: imageModel, userId, userEmail: sessionUser?.email ?? '' }),
-      })
-
-      const payload = (await response.json()) as
-        | { imageUrl: string; model: string }
-        | { error: string; details?: string }
-
-      if (!response.ok) {
-        throw new Error('error' in payload ? payload.error : 'Image generation failed.')
-      }
-
-      if ('imageUrl' in payload) {
-        setImageUrl(payload.imageUrl)
-      }
-    } catch (imageGenError) {
-      setImageError(
-        imageGenError instanceof Error
-          ? imageGenError.message
-          : 'Unable to generate an image right now.',
-      )
-    } finally {
-      setIsGeneratingImage(false)
-    }
-  }
-
-  const generateVideo = async () => {
-    if (!canUseAdvancedTools) {
-      setVideoError('Sign in to use video generation.')
-      return
-    }
-
-    const prompt = videoPrompt.trim()
-    if (!prompt || isGeneratingVideo) {
-      return
-    }
-
-    setIsGeneratingVideo(true)
-    setVideoError('')
-
-    try {
-      const response = await fetch(apiUrl('/api/video'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ prompt, model: videoModel }),
-      })
-
-      const payload = (await response.json()) as
-        | { result: string; model: string }
-        | { error: string; details?: string }
-
-      if (!response.ok) {
-        throw new Error('error' in payload ? payload.error : 'Video generation failed.')
-      }
-
-      if ('result' in payload) {
-        setVideoUrl(payload.result)
-      }
-    } catch (videoGenError) {
-      setVideoError(
-        videoGenError instanceof Error
-          ? videoGenError.message
-          : 'Unable to generate a video right now.',
-      )
-    } finally {
-      setIsGeneratingVideo(false)
-    }
-  }
-
   return (
     <main className="app-shell">
       <div className="container">
@@ -1249,42 +1138,6 @@ export default function HomePage() {
                     className="tools-popover-item"
                     type="button"
                     onClick={() => {
-                      setActiveToolPanel('image')
-                      setIsToolMenuOpen(false)
-                    }}
-                    disabled={!canUseAdvancedTools}
-                  >
-                    <Sparkles size={16} />
-                    <span>
-                      <strong>Image generation</strong>
-                      <small>{canUseAdvancedTools ? 'Create visuals from a prompt' : 'Sign in to unlock image generation'}</small>
-                    </span>
-                  </button>
-                  <button
-                    className="tools-popover-item"
-                    type="button"
-                    onClick={() => {
-                      if (!canUseAdvancedTools) {
-                        setIsToolMenuOpen(false)
-                        setAuthMode('sign-in')
-                        setIsAuthMenuOpen(true)
-                        return
-                      }
-                      setActiveToolPanel('video')
-                      setIsToolMenuOpen(false)
-                    }}
-                    disabled={!canUseAdvancedTools}
-                  >
-                    <Video size={16} />
-                    <span>
-                      <strong>Video generation</strong>
-                      <small>{canUseAdvancedTools ? 'Generate videos from a prompt' : 'Sign in to unlock video generation'}</small>
-                    </span>
-                  </button>
-                  <button
-                    className="tools-popover-item"
-                    type="button"
-                    onClick={() => {
                       if (!canUseAdvancedTools) {
                         setIsToolMenuOpen(false)
                         setAuthMode('sign-in')
@@ -1425,130 +1278,6 @@ export default function HomePage() {
                 </div>
               ) : null}
 
-              {activeToolPanel === 'image' ? (
-                <div className="sidebar-card">
-                  <div className="section-title">Image generation</div>
-
-                  {canUseAdvancedTools ? (
-                    <>
-                      <div className="model-picker-row">
-                        <select
-                          className="control"
-                          value={imageModel}
-                          onChange={(event) => setImageModel(event.target.value)}
-                          disabled={isGeneratingImage}
-                        >
-                          {IMAGE_MODEL_OPTIONS.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <textarea
-                        ref={imageRef}
-                        className="textarea"
-                        value={imagePrompt}
-                        onChange={(event) => setImagePrompt(event.target.value)}
-                        placeholder="Describe the image you want..."
-                        rows={4}
-                      />
-                      <button className="button button-primary" type="button" onClick={generateImage} disabled={isGeneratingImage}>
-                        <Sparkles size={16} /> {isGeneratingImage ? 'Generating...' : 'Generate image'}
-                      </button>
-
-                      {imageError ? <div className="error">{imageError}</div> : null}
-
-                      <div className="image-preview">
-                        {imageUrl ? (
-                          <img src={imageUrl} alt="Generated result" />
-                        ) : (
-                          <div className="placeholder">
-                            <strong>No image yet.</strong>
-                            <div className="meta">Generate one to preview the image result.</div>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="locked-panel">
-                      <p className="helper">Sign in to use image generation.</p>
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              {activeToolPanel === 'video' ? (
-                <div className="sidebar-card">
-                  <div className="section-title">Video generation</div>
-
-                  {canUseAdvancedTools ? (
-                    <>
-                      <div className="model-picker-row">
-                        <select
-                          className="control"
-                          value={videoModel}
-                          onChange={(event) => setVideoModel(event.target.value)}
-                          disabled={isGeneratingVideo}
-                        >
-                          {VIDEO_MODEL_OPTIONS.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <textarea
-                        className="textarea"
-                        value={videoPrompt}
-                        onChange={(event) => setVideoPrompt(event.target.value)}
-                        placeholder="Describe the video you want to generate..."
-                        rows={4}
-                      />
-                      <button className="button button-primary" type="button" onClick={generateVideo} disabled={isGeneratingVideo}>
-                        <Video size={16} /> {isGeneratingVideo ? 'Generating...' : 'Generate video'}
-                      </button>
-
-                      {videoError ? <div className="error">{videoError}</div> : null}
-
-                      {isGeneratingVideo ? (
-                        <div className="spinner-container">
-                          <LoaderCircle size={32} className="spin" />
-                          <p className="meta">Generating your video with Cosmos...</p>
-                        </div>
-                      ) : null}
-
-                      <div className="video-preview">
-                        {videoUrl ? (
-                          <>
-                            <video src={videoUrl} controls className="video-player" />
-                            <a
-                              href={videoUrl}
-                              download
-                              className="button button-ghost"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <Download size={16} /> Download
-                            </a>
-                          </>
-                        ) : (
-                          <div className="placeholder">
-                            <strong>No video yet.</strong>
-                            <div className="meta">Generate one to preview the Cosmos video result.</div>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="locked-panel">
-                      <p className="helper">Sign in to use video generation.</p>
-                    </div>
-                  )}
-                </div>
-              ) : null}
             </div>
           ) : null}
           </section>
