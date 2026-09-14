@@ -12,6 +12,7 @@ import {
   Mic,
   MicOff,
   Paperclip,
+  Phone,
   Plus,
   Menu,
   RefreshCcw,
@@ -1385,7 +1386,7 @@ export default function HomePage() {
                 </button>
                 <div className="tts-row">
                   <button
-                    className={`chip${isVoiceMode ? ' chip-active' : ''}`}
+                    className={`icon-button${isVoiceMode ? ' active' : ''}`}
                     type="button"
                     onClick={() => {
                       if (isVoiceMode) {
@@ -1400,8 +1401,9 @@ export default function HomePage() {
                     }}
                     aria-label={isVoiceMode ? 'Exit voice conversation' : 'Start voice conversation'}
                     aria-pressed={isVoiceMode}
+                    title={isVoiceMode ? 'Exit voice conversation' : 'Talk to Bag-v1'}
                   >
-                    Voice
+                    <Phone size={16} />
                   </button>
                   <button
                     className="icon-button"

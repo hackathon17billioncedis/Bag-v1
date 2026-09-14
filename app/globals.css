@@ -239,6 +239,11 @@ html {
   border-color: rgba(16, 163, 127, 0.55);
 }
 
+.icon-button.active {
+  border-color: rgba(16, 163, 127, 0.65);
+  background: rgba(16, 163, 127, 0.15);
+}
+
 .icon-button.recording {
   border-color: rgba(239, 68, 68, 0.8);
   background: rgba(239, 68, 68, 0.15);

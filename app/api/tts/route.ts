@@ -22,6 +22,48 @@ function isOpenRouterTtsModel(model: string) {
   return OPENROUTER_TTS_MODEL_IDS.has(model)
 }
 
+const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech'
+// Fastest/cheapest ElevenLabs model — best fit for realtime voice conversation.
+const ELEVENLABS_MODEL_ID = 'eleven_flash_v2_5'
+const ELEVENLABS_PREFIX = 'elevenlabs/'
+
+function getElevenLabsVoiceId(model: string) {
+  return model.startsWith(ELEVENLABS_PREFIX)
+    ? model.slice(ELEVENLABS_PREFIX.length).trim()
+    : null
+}
+
+async function callElevenLabsTts(voiceId: string, text: string) {
+  const apiKey = process.env.ELEVENLABS_API_KEY
+  if (!apiKey) {
+    throw new Error('ELEVENLABS_API_KEY is not configured.')
+  }
+  return fetch(`${ELEVENLABS_TTS_URL}/${encodeURIComponent(voiceId)}`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text,
+      model_id: ELEVENLABS_MODEL_ID,
+    }),
+  })
+}
+
+function audioResponse(response: Response) {
+  return response.arrayBuffer().then(
+    (audioBuffer) =>
+      new NextResponse(audioBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': response.headers.get('Content-Type') || 'audio/mpeg',
+          'Cache-Control': 'no-cache',
+        },
+      }),
+  )
+}
+
 function shouldFallback(status: number, body: string) {
   if (status === 429 || status === 402 || status >= 500) return true
   const lower = body.toLowerCase()
@@ -99,6 +141,52 @@ export async function POST(request: Request) {
   }
   if (body.language) {
     nvidiaPayload.language = body.language
+  }
+
+  // ElevenLabs account voices — silent Magpie fallback on retryable failure
+  // (429/402/5xx, rate/capacity/quota errors). 401 (bad key) surfaces directly.
+  const elevenVoiceId = getElevenLabsVoiceId(requestedModel)
+  if (elevenVoiceId) {
+    let response: Response
+    try {
+      response = await callElevenLabsTts(elevenVoiceId, text)
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : 'TTS request failed.' },
+        { status: 500 },
+      )
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      if (response.status !== 401 && (shouldFallback(response.status, errorText) || errorText.toLowerCase().includes('quota'))) {
+        const fallbackResponse = await callNvidiaTts({
+          ...nvidiaPayload,
+          model: DEFAULT_TTS_MODEL,
+        })
+        if (!fallbackResponse.ok) {
+          const fallbackErr = await fallbackResponse.text()
+          return NextResponse.json(
+            {
+              error: `TTS request failed with status ${fallbackResponse.status}.`,
+              details: fallbackErr,
+            },
+            { status: fallbackResponse.status },
+          )
+        }
+        return audioResponse(fallbackResponse)
+      }
+
+      return NextResponse.json(
+        {
+          error: `TTS request failed with status ${response.status}.`,
+          details: errorText,
+        },
+        { status: response.status },
+      )
+    }
+
+    return audioResponse(response)
   }
 
   // OpenRouter-hosted free voices — silent Magpie fallback on retryable failure.
