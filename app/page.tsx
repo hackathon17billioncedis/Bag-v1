@@ -12,7 +12,7 @@ import {
   Mic,
   MicOff,
   Paperclip,
-  Phone,
+  PhoneOff,
   Plus,
   Menu,
   RefreshCcw,
@@ -156,6 +156,8 @@ export default function HomePage() {
   const [ttsModel, setTtsModel] = useState(DEFAULT_TTS_MODEL)
   const [isVoiceMode, setIsVoiceMode] = useState(false)
   const [isRecordingVoice, setIsRecordingVoice] = useState(false)
+  const [liveUserText, setLiveUserText] = useState('')
+  const [liveAssistantText, setLiveAssistantText] = useState('')
   const [attachments, setAttachments] = useState<UploadedFile[]>([])
   const [canvasText, setCanvasText] = useState('')
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in')
@@ -169,6 +171,12 @@ export default function HomePage() {
   const voiceRecorderRef = useRef<MediaRecorder | null>(null)
   const voiceChunksRef = useRef<Blob[]>([])
   const voiceStreamRef = useRef<MediaStream | null>(null)
+  // Ref mirrors so async audio callbacks never act on stale state.
+  const recordingRef = useRef(false)
+  const sendingRef = useRef(false)
+  const speakingRef = useRef(false)
+  const voiceModeRef = useRef(false)
+  const voiceSessionRef = useRef(0)
 
   const currentModel = useMemo(() => getModelOption(model), [model])
   const modelOptions = useMemo(() => getModelOptions(), [])
@@ -474,6 +482,34 @@ export default function HomePage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end', inline: 'nearest' })
   }, [messages])
 
+  // Keep async voice-loop callbacks in sync with the latest state.
+  useEffect(() => {
+    recordingRef.current = isRecordingVoice
+  }, [isRecordingVoice])
+  useEffect(() => {
+    sendingRef.current = isSending
+  }, [isSending])
+  useEffect(() => {
+    speakingRef.current = isSpeaking
+  }, [isSpeaking])
+  useEffect(() => {
+    voiceModeRef.current = isVoiceMode
+  }, [isVoiceMode])
+
+  // Escape closes the Voice Room.
+  useEffect(() => {
+    if (!isVoiceMode) {
+      return
+    }
+    const onVoiceKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setVoiceMode(false)
+      }
+    }
+    window.addEventListener('keydown', onVoiceKeyDown)
+    return () => window.removeEventListener('keydown', onVoiceKeyDown)
+  }, [isVoiceMode])
+
   useEffect(() => {
     return () => {
       window.speechSynthesis.cancel()
@@ -491,8 +527,12 @@ export default function HomePage() {
   }
 
   const speak = async (text: string, voiceModel?: string) => {
-    if (!text.trim() || isSpeaking) {
+    if (!text.trim()) {
       return
+    }
+    // A new reply always wins — cut off stale audio instead of silently dropping the reply.
+    if (speakingRef.current) {
+      stopVoicePlayback()
     }
 
     setIsSpeaking(true)
@@ -513,17 +553,66 @@ export default function HomePage() {
           voiceAudioRef.current = null
         }
         setIsSpeaking(false)
+        scheduleHandsFreeRestart()
       }
       audio.onerror = () => {
         if (voiceAudioRef.current === audio) {
           voiceAudioRef.current = null
         }
         setIsSpeaking(false)
+        scheduleHandsFreeRestart()
       }
       await audio.play()
     } catch {
       voiceAudioRef.current = null
       setIsSpeaking(false)
+      if (voiceModeRef.current) {
+        setError('Tap the orb and speak — audio playback was blocked.')
+        scheduleHandsFreeRestart()
+      }
+    }
+  }
+
+  type MinimalAudioBuffer = unknown
+
+  type MinimalAudioContext = {
+    readonly sampleRate: number
+    readonly state: string
+    readonly destination: unknown
+    resume: () => Promise<void>
+    createBuffer: (channels: number, length: number, sampleRate: number) => MinimalAudioBuffer
+    createBufferSource: () => {
+      buffer: MinimalAudioBuffer | null
+      connect: (destination: unknown) => void
+      start: () => void
+    }
+  }
+
+  type WindowWithAudio = Window & {
+    AudioContext?: new () => MinimalAudioContext
+    webkitAudioContext?: new () => MinimalAudioContext
+  }
+
+  // Unlock programmatic audio inside a real user gesture so later
+  // hands-free play() calls are not rejected by autoplay policy.
+  const unlockAudio = () => {
+    try {
+      const audioWindow = window as WindowWithAudio
+      const Ctx = audioWindow.AudioContext ?? audioWindow.webkitAudioContext
+      if (!Ctx) {
+        return
+      }
+      const ctx = new Ctx()
+      if (ctx.state === 'suspended') {
+        void ctx.resume()
+      }
+      const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.05), ctx.sampleRate)
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.connect(ctx.destination)
+      source.start()
+    } catch {
+      // Ignore — playback will surface an error if it is actually blocked.
     }
   }
 
@@ -586,7 +675,6 @@ export default function HomePage() {
     startListening()
   }
 
-  const VOICE_CONVERSATION_MODEL = 'deepgram/flux-tts:free'
   const MAX_VOICE_TURN_MS = 30000
 
   const stopVoiceRecording = () => {
@@ -598,6 +686,9 @@ export default function HomePage() {
   }
 
   const setVoiceMode = (enabled: boolean) => {
+    // Bump the session so any scheduled hands-free restarts from a
+    // previous session die instead of reopening the mic behind us.
+    voiceSessionRef.current += 1
     if (!enabled) {
       if (isRecordingVoice) {
         // Discard the partial turn — clear chunks before stop() fires onstop.
@@ -606,21 +697,24 @@ export default function HomePage() {
       }
       stopVoicePlayback()
       setIsVoiceMode(false)
+      setLiveUserText('')
+      setLiveAssistantText('')
       return
     }
-    // Entering voice mode — default the conversation voice to Flux.
-    setTtsModel(VOICE_CONVERSATION_MODEL)
+    // Entering voice mode — keep the user's selected TTS voice.
     setError('')
+    setLiveUserText('')
+    setLiveAssistantText('')
     setIsVoiceMode(true)
   }
 
-  const startVoiceTurn = async () => {
+  const startVoiceTurn = async (): Promise<boolean> => {
     // Mic-press-stops-playback (barge-in).
-    if (isSpeaking) {
+    if (speakingRef.current) {
       stopVoicePlayback()
     }
-    if (isRecordingVoice || isSending) {
-      return
+    if (recordingRef.current || sendingRef.current) {
+      return false
     }
 
     let stream: MediaStream
@@ -628,7 +722,7 @@ export default function HomePage() {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     } catch {
       setError('Microphone access was denied.')
-      return
+      return false
     }
 
     const recorder = new MediaRecorder(stream)
@@ -654,6 +748,7 @@ export default function HomePage() {
         stopVoiceRecording()
       }
     }, MAX_VOICE_TURN_MS)
+    return true
   }
 
   const finishVoiceTurn = async () => {
@@ -685,12 +780,16 @@ export default function HomePage() {
       }
       const transcript = (payload.text ?? '').trim()
       if (!transcript) {
-        setError('Did not catch that — press the mic and try again.')
+        setError('Did not catch that — speak again.')
+        scheduleHandsFreeRestart()
         return
       }
+      setLiveUserText(transcript)
+      setLiveAssistantText('')
       await submitChat(transcript)
     } catch (voiceError) {
       setError(voiceError instanceof Error ? voiceError.message : 'Voice turn failed.')
+      scheduleHandsFreeRestart()
     }
   }
 
@@ -700,6 +799,28 @@ export default function HomePage() {
       return
     }
     void startVoiceTurn()
+  }
+
+  // Hands-free loop: after the AI finishes speaking, reopen the mic
+  // automatically. Retries cover the brief sending window; the session
+  // guard makes sure a closed room never reopens itself.
+  const scheduleHandsFreeRestart = (delayMs = 450) => {
+    const session = voiceSessionRef.current
+    window.setTimeout(() => {
+      void restartHandsFreeLoop(session, 0)
+    }, delayMs)
+  }
+
+  const restartHandsFreeLoop = async (session: number, attempt: number): Promise<void> => {
+    if (session !== voiceSessionRef.current || !voiceModeRef.current) {
+      return
+    }
+    const started = await startVoiceTurn()
+    if (!started && attempt < 8 && session === voiceSessionRef.current && voiceModeRef.current) {
+      window.setTimeout(() => {
+        void restartHandsFreeLoop(session, attempt + 1)
+      }, 600)
+    }
   }
 
   const openFilePicker = () => {
@@ -753,6 +874,9 @@ export default function HomePage() {
         setIsThinking(false)
         if (reply) {
           setMessages((current) => [...current, { role: 'assistant', content: reply }])
+          if (voiceModeRef.current) {
+            setLiveAssistantText(reply)
+          }
           setCanvasText(reply)
           // Voice mode: auto-speak every reply.
           if (isVoiceMode) {
@@ -802,6 +926,9 @@ export default function HomePage() {
             }
           }),
         )
+        if (voiceModeRef.current) {
+          setLiveAssistantText(assistantText)
+        }
       }
 
       assistantText += decoder.decode()
@@ -820,6 +947,9 @@ export default function HomePage() {
           }
         }),
       )
+      if (voiceModeRef.current) {
+        setLiveAssistantText(finalReply)
+      }
 
       if (finalReply) {
         setCanvasText(finalReply)
@@ -842,6 +972,8 @@ export default function HomePage() {
     } catch (chatError) {
       setIsThinking(false)
       setError(chatError instanceof Error ? chatError.message : 'Something went wrong.')
+      // Keep a hands-free voice session alive — reopen the mic so the user can retry by speaking.
+      scheduleHandsFreeRestart()
     } finally {
       setIsThinking(false)
       setIsSending(false)
@@ -968,6 +1100,46 @@ export default function HomePage() {
     const blob = await Packer.toBlob(doc)
     const baseName = normalizeFilename(canvasText.split('\n')[0] ?? 'bag-v1')
     saveBlob(blob, `${baseName}.docx`)
+  }
+
+  const voicePhase = isRecordingVoice
+    ? 'is-listening'
+    : isThinking || isSending
+      ? 'is-thinking'
+      : isSpeaking
+        ? 'is-speaking'
+        : 'is-idle'
+  const voiceStatusText = isRecordingVoice
+    ? 'Listening…'
+    : isThinking || isSending
+      ? 'Thinking…'
+      : isSpeaking
+        ? 'Speaking — tap to interrupt'
+        : error
+          ? 'Tap the orb to try again'
+          : 'Getting ready…'
+  const voiceOrbLabel = isSpeaking
+    ? 'Interrupt reply and speak'
+    : isRecordingVoice
+      ? 'Stop recording and send'
+      : 'Start speaking'
+
+  const handleOrbTap = () => {
+    unlockAudio()
+    if (isSpeaking) {
+      stopVoicePlayback()
+    }
+    void toggleVoiceTurn()
+  }
+
+  const enterVoiceRoom = () => {
+    if (!canUseAdvancedTools) {
+      setError('Sign in to use voice conversation.')
+      return
+    }
+    unlockAudio()
+    setVoiceMode(true)
+    void startVoiceTurn()
   }
 
   return (
@@ -1361,6 +1533,15 @@ export default function HomePage() {
               />
               <div className="composer-send-stack">
                 <button
+                  className="voice-fab"
+                  type="button"
+                  onClick={enterVoiceRoom}
+                  aria-label="Start voice conversation"
+                  title="Talk to Bag-v1"
+                >
+                  <Mic size={26} />
+                </button>
+                <button
                   className={`icon-button${isVoiceMode && isRecordingVoice ? ' recording' : ''}`}
                   type="button"
                   onClick={isVoiceMode ? toggleVoiceTurn : toggleListening}
@@ -1385,26 +1566,6 @@ export default function HomePage() {
                   )}
                 </button>
                 <div className="tts-row">
-                  <button
-                    className={`icon-button${isVoiceMode ? ' active' : ''}`}
-                    type="button"
-                    onClick={() => {
-                      if (isVoiceMode) {
-                        setVoiceMode(false)
-                        return
-                      }
-                      if (!canUseAdvancedTools) {
-                        setError('Sign in to use voice conversation.')
-                        return
-                      }
-                      setVoiceMode(true)
-                    }}
-                    aria-label={isVoiceMode ? 'Exit voice conversation' : 'Start voice conversation'}
-                    aria-pressed={isVoiceMode}
-                    title={isVoiceMode ? 'Exit voice conversation' : 'Talk to Bag-v1'}
-                  >
-                    <Phone size={16} />
-                  </button>
                   <button
                     className="icon-button"
                     type="button"
@@ -1490,6 +1651,55 @@ export default function HomePage() {
           </section>
         </div>
       </div>
+      {isVoiceMode ? (
+        <div className="voice-room" role="dialog" aria-modal="true" aria-label="Voice conversation">
+          <div className="voice-room-inner">
+            <div className="voice-status" aria-live="polite">
+              <span className={`voice-dot ${voicePhase}`} aria-hidden="true" />
+              {voiceStatusText}
+            </div>
+            <button
+              type="button"
+              className={`voice-orb ${voicePhase}`}
+              onClick={handleOrbTap}
+              aria-label={voiceOrbLabel}
+            >
+              <span className="voice-orb-core" aria-hidden="true">
+                <Mic size={30} />
+              </span>
+              <span className="voice-bars" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </span>
+            </button>
+            <div className="voice-live" aria-live="polite">
+              {liveUserText ? (
+                <p className="voice-heard">
+                  <span>You</span>
+                  {liveUserText}
+                </p>
+              ) : (
+                <p className="voice-hint">Speak now — your words appear here.</p>
+              )}
+              {liveAssistantText ? (
+                <p className="voice-reply">
+                  <span>{APP_NAME}</span>
+                  {formatAssistantDisplayText(liveAssistantText)}
+                </p>
+              ) : null}
+            </div>
+            {error ? <p className="voice-error">{error}</p> : null}
+            <div className="voice-room-actions">
+              <button type="button" className="button button-danger voice-end" onClick={() => setVoiceMode(false)}>
+                <PhoneOff size={16} /> End
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }
