@@ -677,6 +677,103 @@ export default function HomePage() {
 
   const MAX_VOICE_TURN_MS = 30000
 
+// On-device Whisper, loaded lazily and only when every server-side provider
+// has already failed. Costs $0, keeps audio on the device, needs WebGPU or
+// falls back to WASM. Model weights are cached by the browser after first use.
+const BROWSER_STT_MODEL = 'onnx-community/whisper-tiny.en'
+const browserSttPipelineRef = useRef<{
+  transcribe: (
+    audio: Float32Array,
+    options: Record<string, unknown>,
+  ) => Promise<{ text: string }>
+  dispose?: () => Promise<void>
+} | null>(null)
+const browserSttLoadingRef = useRef<Promise<boolean> | null>(null)
+
+async function getBrowserSttPipeline() {
+  if (browserSttPipelineRef.current) {
+    return browserSttPipelineRef.current
+  }
+  if (browserSttLoadingRef.current) {
+    return (await browserSttLoadingRef.current) ? browserSttPipelineRef.current : null
+  }
+
+  browserSttLoadingRef.current = (async () => {
+    try {
+      const { pipeline, env } = await import('@huggingface/transformers')
+      // Keep weights in the browser Cache API rather than the server.
+      env.allowLocalModels = false
+
+      const audioWindow = window as Window & {
+        navigator?: Navigator & { gpu?: unknown }
+      }
+      const hasWebGpu = Boolean(audioWindow.navigator?.gpu)
+      const device = hasWebGpu ? 'webgpu' : 'wasm'
+
+      const transcriber = await pipeline('automatic-speech-recognition', BROWSER_STT_MODEL, {
+        device,
+        dtype: hasWebGpu ? 'fp32' : 'q8',
+      })
+
+      browserSttPipelineRef.current = transcriber as unknown as {
+        transcribe: (audio: Float32Array, options: Record<string, unknown>) => Promise<{ text: string }>
+        dispose?: () => Promise<void>
+      }
+      return true
+    } catch {
+      return false
+    } finally {
+      browserSttLoadingRef.current = null
+    }
+  })()
+
+  return (await browserSttLoadingRef.current) ? browserSttPipelineRef.current : null
+}
+
+async function transcribeInBrowser(blob: Blob): Promise<string | null> {
+  const transcriber = await getBrowserSttPipeline()
+  if (!transcriber) {
+    return null
+  }
+
+  // Decode whatever the browser recorded into mono float samples.
+  const arrayBuffer = await blob.arrayBuffer()
+  const audioWindow = globalThis as typeof globalThis & {
+    AudioContext?: new () => AudioContext
+  }
+  const Ctx = audioWindow.AudioContext
+  if (!Ctx) {
+    return null
+  }
+
+  const ctx = new Ctx()
+  let mono: Float32Array
+  try {
+    const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0))
+    const left = decoded.getChannelData(0)
+    const channels = decoded.numberOfChannels
+    if (channels > 1) {
+      const right = decoded.getChannelData(1)
+      const mixed = new Float32Array(left.length)
+      for (let i = 0; i < left.length; i += 1) {
+        mixed[i] = (left[i] + right[i]) / 2
+      }
+      mono = mixed
+    } else {
+      mono = left
+    }
+  } finally {
+    void ctx.close()
+  }
+
+  const output = await transcriber.transcribe(mono, { language: 'en', task: 'transcribe' })
+  const text = (output?.text ?? '')
+    .replace(/<\|[^|]*\|>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text || null
+}
+
   const stopVoiceRecording = () => {
     voiceRecorderRef.current?.stop()
     voiceRecorderRef.current = null
@@ -774,9 +871,14 @@ export default function HomePage() {
       const payload = (await response.json().catch(() => ({}))) as {
         text?: string
         error?: string
+        details?: string[]
       }
       if (!response.ok) {
-        throw new Error(payload.error ?? 'Transcription failed.')
+        throw new Error(
+          [payload.error ?? 'Transcription failed.', ...(payload.details ?? [])]
+            .filter(Boolean)
+            .join(' '),
+        )
       }
       const transcript = (payload.text ?? '').trim()
       if (!transcript) {
@@ -788,8 +890,22 @@ export default function HomePage() {
       setLiveAssistantText('')
       await submitChat(transcript)
     } catch (voiceError) {
-      setError(voiceError instanceof Error ? voiceError.message : 'Voice turn failed.')
-      scheduleHandsFreeRestart()
+      // Every server provider failed — try fully local, on-device Whisper.
+      try {
+        setError('Cloud transcription unavailable — transcribing on-device…')
+        const local = await transcribeInBrowser(blob)
+        if (local) {
+          setLiveUserText(local)
+          setLiveAssistantText('')
+          setError('')
+          await submitChat(local)
+          return
+        }
+        throw voiceError
+      } catch {
+        setError(voiceError instanceof Error ? voiceError.message : 'Voice turn failed.')
+        scheduleHandsFreeRestart()
+      }
     }
   }
 

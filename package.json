@@ -12,6 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.0",
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/kv": "^3.0.0",
     "crypto-js": "^4.2.0",
