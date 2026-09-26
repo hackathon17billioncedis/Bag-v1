@@ -28,8 +28,11 @@ export const DEFAULT_MODEL =
       process.env.OPENROUTER_MODEL ??
       'meta-llama/llama-3.1-8b-instruct',
   )
-export const DEFAULT_TTS_MODEL = 'nvidia/magpie-tts-multilingual'
-export const DEFAULT_STT_MODEL = 'openai/whisper-large-v3'
+// Default voice: Deepgram Flux via OpenRouter. Verified live (200 + audio/mpeg)
+// and free. ElevenLabs account voices are available below and are higher
+// quality, but Flux is the dependable default.
+export const DEFAULT_TTS_MODEL = 'deepgram/flux-tts:free'
+export const DEFAULT_STT_MODEL = 'openai/whisper-large-v3-turbo'
 export const FALLBACK_STT_MODEL = 'qwen/qwen3-asr-0.6b'
 
 export const SYSTEM_PROMPT = `You are ${APP_NAME}, a warm, helpful AI assistant.
@@ -204,20 +207,6 @@ export const MODEL_OPTIONS: ModelOption[] = [
 ]
 
 export const TTS_MODEL_OPTIONS: ModelOption[] = [
-  {
-    id: 'nvidia/magpie-tts-multilingual',
-    label: 'Magpie TTS Multilingual',
-    category: 'TTS',
-    description: 'NVIDIA multilingual text-to-speech.',
-    bestFor: 'Natural speech in multiple languages',
-  },
-  {
-    id: 'resembleai/chatterbox-multilingual-tts',
-    label: 'Chatterbox TTS',
-    category: 'TTS',
-    description: '23-language TTS with voice cloning.',
-    bestFor: 'Expressive multilingual speech',
-  },
   {
     id: 'deepgram/flux-tts:free',
     label: 'Flux TTS (Free)',

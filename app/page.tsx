@@ -167,7 +167,8 @@ export default function HomePage() {
   const recognitionRef = useRef<VoiceRecognition | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const canvasRef = useRef<HTMLTextAreaElement | null>(null)
-  const voiceAudioRef = useRef<HTMLAudioElement | null>(null)
+  const voiceCtxRef = useRef<AudioContext | null>(null)
+  const voiceSourceRef = useRef<AudioBufferSourceNode | null>(null)
   const voiceRecorderRef = useRef<MediaRecorder | null>(null)
   const voiceChunksRef = useRef<Blob[]>([])
   const voiceStreamRef = useRef<MediaStream | null>(null)
@@ -513,15 +514,28 @@ export default function HomePage() {
   useEffect(() => {
     return () => {
       window.speechSynthesis.cancel()
+      const source = voiceSourceRef.current
+      if (source) {
+        try {
+          source.stop()
+        } catch {
+          // Already stopped.
+        }
+      }
+      void voiceCtxRef.current?.close()
     }
   }, [])
 
   const stopVoicePlayback = () => {
-    const audio = voiceAudioRef.current
-    if (audio) {
-      audio.pause()
-      URL.revokeObjectURL(audio.src)
-      voiceAudioRef.current = null
+    const source = voiceSourceRef.current
+    if (source) {
+      try {
+        source.stop()
+      } catch {
+        // Already stopped.
+      }
+      source.disconnect()
+      voiceSourceRef.current = null
     }
     setIsSpeaking(false)
   }
@@ -535,6 +549,19 @@ export default function HomePage() {
       stopVoicePlayback()
     }
 
+    const ctx = getVoiceAudioContext()
+    if (!ctx) {
+      setError('Audio playback is not supported in this browser.')
+      return
+    }
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume()
+      } catch {
+        // Fall through; play() below will report the real problem.
+      }
+    }
+
     setIsSpeaking(true)
     try {
       const response = await fetch(apiUrl('/api/tts'), {
@@ -543,76 +570,70 @@ export default function HomePage() {
         body: JSON.stringify({ text, model: voiceModel ?? ttsModel }),
       })
       if (!response.ok) {
-        throw new Error('TTS request failed')
+        const payload = (await response.json().catch(() => ({}))) as { error?: string }
+        throw new Error(payload.error ?? 'TTS request failed')
       }
-      const blob = await response.blob()
-      const audio = new Audio(URL.createObjectURL(blob))
-      voiceAudioRef.current = audio
-      audio.onended = () => {
-        if (voiceAudioRef.current === audio) {
-          voiceAudioRef.current = null
+
+      // Play through Web Audio rather than a fresh <audio> element: the
+      // AudioContext was resumed inside the user's click, so hands-free
+      // playback is not blocked by autoplay policy.
+      const encoded = await response.arrayBuffer()
+      const audioBuffer = await ctx.decodeAudioData(encoded.slice(0))
+      const source = ctx.createBufferSource()
+      source.buffer = audioBuffer
+      source.connect(ctx.destination)
+      voiceSourceRef.current = source
+
+      source.onended = () => {
+        if (voiceSourceRef.current === source) {
+          voiceSourceRef.current = null
         }
         setIsSpeaking(false)
         scheduleHandsFreeRestart()
       }
-      audio.onerror = () => {
-        if (voiceAudioRef.current === audio) {
-          voiceAudioRef.current = null
-        }
-        setIsSpeaking(false)
-        scheduleHandsFreeRestart()
-      }
-      await audio.play()
-    } catch {
-      voiceAudioRef.current = null
+
+      source.start()
+    } catch (error) {
+      voiceSourceRef.current = null
       setIsSpeaking(false)
       if (voiceModeRef.current) {
-        setError('Tap the orb and speak — audio playback was blocked.')
-        scheduleHandsFreeRestart()
+        setError(error instanceof Error ? error.message : 'Audio playback failed.')
       }
-    }
-  }
-
-  type MinimalAudioBuffer = unknown
-
-  type MinimalAudioContext = {
-    readonly sampleRate: number
-    readonly state: string
-    readonly destination: unknown
-    resume: () => Promise<void>
-    createBuffer: (channels: number, length: number, sampleRate: number) => MinimalAudioBuffer
-    createBufferSource: () => {
-      buffer: MinimalAudioBuffer | null
-      connect: (destination: unknown) => void
-      start: () => void
+      scheduleHandsFreeRestart()
     }
   }
 
   type WindowWithAudio = Window & {
-    AudioContext?: new () => MinimalAudioContext
-    webkitAudioContext?: new () => MinimalAudioContext
+    webkitAudioContext?: typeof AudioContext
   }
 
-  // Unlock programmatic audio inside a real user gesture so later
-  // hands-free play() calls are not rejected by autoplay policy.
-  const unlockAudio = () => {
+  // A single long-lived AudioContext, created and resumed inside the user's
+  // click. Every later reply plays through it, which is what keeps hands-free
+  // playback out of the autoplay-policy block.
+  const getVoiceAudioContext = (): AudioContext | null => {
+    if (typeof window === 'undefined') {
+      return null
+    }
+    if (voiceCtxRef.current) {
+      return voiceCtxRef.current
+    }
     try {
       const audioWindow = window as WindowWithAudio
-      const Ctx = audioWindow.AudioContext ?? audioWindow.webkitAudioContext
+      const Ctx = window.AudioContext ?? audioWindow.webkitAudioContext
       if (!Ctx) {
-        return
+        return null
       }
-      const ctx = new Ctx()
-      if (ctx.state === 'suspended') {
-        void ctx.resume()
-      }
-      const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.05), ctx.sampleRate)
-      const source = ctx.createBufferSource()
-      source.buffer = buffer
-      source.connect(ctx.destination)
-      source.start()
+      voiceCtxRef.current = new Ctx()
+      return voiceCtxRef.current
     } catch {
-      // Ignore — playback will surface an error if it is actually blocked.
+      return null
+    }
+  }
+
+  const unlockAudio = () => {
+    const ctx = getVoiceAudioContext()
+    if (ctx && ctx.state === 'suspended') {
+      void ctx.resume()
     }
   }
 

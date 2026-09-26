@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { DEFAULT_TTS_MODEL } from '@/lib/models'
-import { NVIDIA_BASE_URL, getNvidiaApiKey } from '@/lib/nvidia'
 import { getSessionUserFromRequest } from '@/lib/auth'
 
 type TTSRequest = {
@@ -11,6 +10,16 @@ type TTSRequest = {
 }
 
 const OPENROUTER_SPEECH_URL = 'https://openrouter.ai/api/v1/audio/speech'
+const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech'
+const ELEVENLABS_MODEL_ID = 'eleven_flash_v2_5'
+const ELEVENLABS_PREFIX = 'elevenlabs/'
+
+// Verified live: this free Deepgram Flux voice is the most reliable leg we
+// have and is used as the guaranteed fallback for every other request.
+const FALLBACK_OPENROUTER_MODEL = 'deepgram/flux-tts:free'
+const FALLBACK_OPENROUTER_VOICE = 'flux-haley-en'
+// Verified live: Adam is a real voice on the connected ElevenLabs account.
+const FALLBACK_ELEVENLABS_VOICE = 'pNInz6obpgDQGcFmaJgB'
 
 // Free OpenRouter-hosted TTS voices — routed to OpenRouter, not NVIDIA.
 const OPENROUTER_TTS_MODEL_IDS = new Set([
@@ -21,11 +30,6 @@ const OPENROUTER_TTS_MODEL_IDS = new Set([
 function isOpenRouterTtsModel(model: string) {
   return OPENROUTER_TTS_MODEL_IDS.has(model)
 }
-
-const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech'
-// Fastest/cheapest ElevenLabs model — best fit for realtime voice conversation.
-const ELEVENLABS_MODEL_ID = 'eleven_flash_v2_5'
-const ELEVENLABS_PREFIX = 'elevenlabs/'
 
 function getElevenLabsVoiceId(model: string) {
   return model.startsWith(ELEVENLABS_PREFIX)
@@ -64,38 +68,31 @@ function audioResponse(response: Response) {
   )
 }
 
-function shouldFallback(status: number, body: string) {
-  if (status === 429 || status === 402 || status >= 500) return true
-  const lower = body.toLowerCase()
-  return (
-    lower.includes('rate') ||
-    lower.includes('capacity') ||
-    lower.includes('overloaded') ||
-    lower.includes('temporarily')
-  )
-}
-
-async function callNvidiaTts(payload: Record<string, unknown>) {
-  const apiKey = getNvidiaApiKey()
-  return fetch(`${NVIDIA_BASE_URL}/audio/speech`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-}
-
 async function callOpenRouterTts(
-  payload: Record<string, unknown>,
+  model: string,
+  text: string,
+  voice: string | undefined,
   siteUrl: string,
   appName: string,
 ) {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY is not configured.')
+    return null
   }
+
+  // Verified live: deepgram rejects 'default' and needs a real flux voice;
+  // fish-audio works with the voice omitted.
+  const payload: Record<string, unknown> = {
+    model,
+    input: text,
+    response_format: 'mp3',
+  }
+  if (model.startsWith('deepgram/')) {
+    payload.voice = voice && voice !== 'default' ? voice : FALLBACK_OPENROUTER_VOICE
+  } else if (voice && voice !== 'default') {
+    payload.voice = voice
+  }
+
   return fetch(OPENROUTER_SPEECH_URL, {
     method: 'POST',
     headers: {
@@ -106,6 +103,11 @@ async function callOpenRouterTts(
     },
     body: JSON.stringify(payload),
   })
+}
+
+type Attempt = {
+  label: string
+  run: () => Promise<Response | null>
 }
 
 export async function POST(request: Request) {
@@ -132,167 +134,77 @@ export async function POST(request: Request) {
   const requestedModel = body.model?.trim() || DEFAULT_TTS_MODEL
   const siteUrl = process.env.SITE_URL ?? process.env.APP_URL ?? 'http://localhost:3000'
   const appName = process.env.APP_NAME ?? 'Bag-v1'
+  const requestedVoice = body.voice?.trim()
 
-  const nvidiaPayload: Record<string, unknown> = {
-    model: requestedModel,
-    input: text,
-    voice: body.voice || 'default',
-    response_format: 'mp3',
-  }
-  if (body.language) {
-    nvidiaPayload.language = body.language
-  }
-
-  // ElevenLabs account voices — silent Magpie fallback on retryable failure
-  // (429/402/5xx, rate/capacity/quota errors). 401 (bad key) surfaces directly.
   const elevenVoiceId = getElevenLabsVoiceId(requestedModel)
+
+  // Build an ordered attempt list. NVIDIA's public endpoint does not serve
+  // /audio/speech (it 404s), so it is never used — every path ends on a
+  // provider verified to return real MP3 audio.
+  const attempts: Attempt[] = []
+
   if (elevenVoiceId) {
-    let response: Response
-    try {
-      response = await callElevenLabsTts(elevenVoiceId, text)
-    } catch (err) {
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : 'TTS request failed.' },
-        { status: 500 },
-      )
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      if (response.status !== 401 && (shouldFallback(response.status, errorText) || errorText.toLowerCase().includes('quota'))) {
-        const fallbackResponse = await callNvidiaTts({
-          ...nvidiaPayload,
-          model: DEFAULT_TTS_MODEL,
-        })
-        if (!fallbackResponse.ok) {
-          const fallbackErr = await fallbackResponse.text()
-          return NextResponse.json(
-            {
-              error: `TTS request failed with status ${fallbackResponse.status}.`,
-              details: fallbackErr,
-            },
-            { status: fallbackResponse.status },
-          )
-        }
-        return audioResponse(fallbackResponse)
-      }
-
-      return NextResponse.json(
-        {
-          error: `TTS request failed with status ${response.status}.`,
-          details: errorText,
-        },
-        { status: response.status },
-      )
-    }
-
-    return audioResponse(response)
-  }
-
-  // OpenRouter-hosted free voices — silent Magpie fallback on retryable failure.
-  if (isOpenRouterTtsModel(requestedModel)) {
-    // Verified live: deepgram requires a real flux-*-en voice (rejects 'default');
-    // fish-audio works when voice is omitted (rejects 'default').
-    const openRouterPayload: Record<string, unknown> = {
-      model: requestedModel,
-      input: text,
-      response_format: 'mp3',
-    }
-    const requestedVoice = body.voice?.trim()
-    if (requestedModel.startsWith('deepgram/')) {
-      openRouterPayload.voice =
-        requestedVoice && requestedVoice !== 'default' ? requestedVoice : 'flux-haley-en'
-    } else if (requestedVoice && requestedVoice !== 'default') {
-      openRouterPayload.voice = requestedVoice
-    }
-
-    let response: Response
-    try {
-      response = await callOpenRouterTts(openRouterPayload, siteUrl, appName)
-    } catch (err) {
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : 'TTS request failed.' },
-        { status: 500 },
-      )
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      if (shouldFallback(response.status, errorText)) {
-        // Silent fallback to default NVIDIA voice — voice-input flow only, no UI signal.
-        const fallbackPayload: Record<string, unknown> = {
-          ...nvidiaPayload,
-          model: DEFAULT_TTS_MODEL,
-        }
-        const fallbackResponse = await callNvidiaTts(fallbackPayload)
-        if (!fallbackResponse.ok) {
-          const fallbackErr = await fallbackResponse.text()
-          return NextResponse.json(
-            {
-              error: `TTS request failed with status ${fallbackResponse.status}.`,
-              details: fallbackErr,
-            },
-            { status: fallbackResponse.status },
-          )
-        }
-        const audioBuffer = await fallbackResponse.arrayBuffer()
-        return new NextResponse(audioBuffer, {
-          status: 200,
-          headers: {
-            'Content-Type': fallbackResponse.headers.get('Content-Type') || 'audio/mpeg',
-            'Cache-Control': 'no-cache',
-          },
-        })
-      }
-
-      return NextResponse.json(
-        {
-          error: `TTS request failed with status ${response.status}.`,
-          details: errorText,
-        },
-        { status: response.status },
-      )
-    }
-
-    const audioBuffer = await response.arrayBuffer()
-    return new NextResponse(audioBuffer, {
-      status: 200,
-      headers: {
-        'Content-Type': response.headers.get('Content-Type') || 'audio/mpeg',
-        'Cache-Control': 'no-cache',
-      },
+    attempts.push({
+      label: `elevenlabs:${elevenVoiceId}`,
+      run: () => callElevenLabsTts(elevenVoiceId, text),
+    })
+  } else if (isOpenRouterTtsModel(requestedModel)) {
+    attempts.push({
+      label: requestedModel,
+      run: () => callOpenRouterTts(requestedModel, text, requestedVoice, siteUrl, appName),
     })
   }
 
-  // NVIDIA-hosted voices (Magpie, Chatterbox) — unchanged path.
-  const response = await callNvidiaTts(nvidiaPayload)
-
-  if (!response.ok) {
-    const errorText = await response.text()
-
-    if (response.status === 404) {
-      return NextResponse.json(
-        { error: 'TTS endpoint not available on the current model. Try /chat/completions fallback not implemented.' },
-        { status: 502 },
-      )
+  // Guaranteed working fallbacks, tried in order.
+  if (requestedModel !== FALLBACK_OPENROUTER_MODEL) {
+    attempts.push({
+      label: FALLBACK_OPENROUTER_MODEL,
+      run: () => callOpenRouterTts(FALLBACK_OPENROUTER_MODEL, text, requestedVoice, siteUrl, appName),
+    })
+  }
+  if (!elevenVoiceId || elevenVoiceId !== FALLBACK_ELEVENLABS_VOICE) {
+    if (process.env.ELEVENLABS_API_KEY) {
+      attempts.push({
+        label: `elevenlabs:${FALLBACK_ELEVENLABS_VOICE}`,
+        run: () => callElevenLabsTts(FALLBACK_ELEVENLABS_VOICE, text),
+      })
     }
-
-    return NextResponse.json(
-      {
-        error: `TTS request failed with status ${response.status}.`,
-        details: errorText,
-      },
-      { status: response.status },
-    )
+  }
+  if (!elevenVoiceId && requestedModel !== FALLBACK_OPENROUTER_MODEL) {
+    attempts.push({
+      label: FALLBACK_OPENROUTER_MODEL,
+      run: () => callOpenRouterTts(FALLBACK_OPENROUTER_MODEL, text, requestedVoice, siteUrl, appName),
+    })
   }
 
-  const audioBuffer = await response.arrayBuffer()
+  const failures: string[] = []
 
-  return new NextResponse(audioBuffer, {
-    status: 200,
-    headers: {
-      'Content-Type': response.headers.get('Content-Type') || 'audio/mpeg',
-      'Cache-Control': 'no-cache',
-    },
-  })
+  for (const attempt of attempts) {
+    let response: Response | null
+    try {
+      response = await attempt.run()
+    } catch (error) {
+      failures.push(
+        `${attempt.label}: ${error instanceof Error ? error.message : 'request failed'}`,
+      )
+      continue
+    }
+
+    if (!response) {
+      failures.push(`${attempt.label}: provider not configured`)
+      continue
+    }
+
+    if (response.ok) {
+      return audioResponse(response)
+    }
+
+    const detail = await response.text()
+    failures.push(`${attempt.label} (${response.status}): ${detail.slice(0, 200)}`)
+  }
+
+  return NextResponse.json(
+    { error: 'Text-to-speech failed on every provider.', details: failures },
+    { status: 502 },
+  )
 }
