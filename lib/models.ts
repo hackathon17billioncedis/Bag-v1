@@ -28,10 +28,12 @@ export const DEFAULT_MODEL =
       process.env.OPENROUTER_MODEL ??
       'meta-llama/llama-3.1-8b-instruct',
   )
-// Default voice: Deepgram Flux via OpenRouter. Verified live (200 + audio/mpeg)
-// and free. ElevenLabs account voices are available below and are higher
-// quality, but Flux is the dependable default.
-export const DEFAULT_TTS_MODEL = 'deepgram/flux-tts:free'
+// Default voice: an ElevenLabs account voice. ElevenLabs routing is independent
+// of the OpenRouter account, so this stays reliable even when OpenRouter
+// provider availability shifts between keys. deepgram/flux-tts:free is NOT the
+// default because it 404s ("No endpoints found") on the current OpenRouter
+// account — its availability is account-specific.
+export const DEFAULT_TTS_MODEL = 'elevenlabs/pNInz6obpgDQGcFmaJgB'
 export const DEFAULT_STT_MODEL = 'openai/whisper-large-v3-turbo'
 export const FALLBACK_STT_MODEL = 'qwen/qwen3-asr-0.6b'
 
@@ -208,18 +210,18 @@ export const MODEL_OPTIONS: ModelOption[] = [
 
 export const TTS_MODEL_OPTIONS: ModelOption[] = [
   {
-    id: 'deepgram/flux-tts:free',
-    label: 'Flux TTS (Free)',
-    category: 'TTS',
-    description: 'Free conversation-aware Deepgram voice via OpenRouter.',
-    bestFor: 'Conversational voice output',
-  },
-  {
     id: 'fish-audio/s2.1-pro-free:free',
     label: 'S2.1 Pro Free (Free)',
     category: 'TTS',
     description: 'Free Fish Audio multilingual voice via OpenRouter.',
     bestFor: 'Multilingual voice output',
+  },
+  {
+    id: 'elevenlabs/pNInz6obpgDQGcFmaJgB',
+    label: 'Adam (ElevenLabs) — Default',
+    category: 'TTS',
+    description: 'Deep, conversational male voice. Independent of OpenRouter routing.',
+    bestFor: 'Everyday hands-free conversation',
   },
   {
     id: 'elevenlabs/hpp4J3VqNfWAUOO0d1Us',

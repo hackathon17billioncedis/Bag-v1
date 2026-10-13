@@ -14,11 +14,13 @@ const ELEVENLABS_TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech'
 const ELEVENLABS_MODEL_ID = 'eleven_flash_v2_5'
 const ELEVENLABS_PREFIX = 'elevenlabs/'
 
-// Verified live: this free Deepgram Flux voice is the most reliable leg we
-// have and is used as the guaranteed fallback for every other request.
-const FALLBACK_OPENROUTER_MODEL = 'deepgram/flux-tts:free'
-const FALLBACK_OPENROUTER_VOICE = 'flux-haley-en'
-// Verified live: Adam is a real voice on the connected ElevenLabs account.
+// Verified live: fish-audio works on the connected OpenRouter account and is
+// the guaranteed OpenRouter fallback. deepgram/flux-tts:free is deliberately
+// NOT used as a fallback — provider routing for it varies per OpenRouter
+// account and it 404s ("No endpoints found") on the current one.
+const FALLBACK_OPENROUTER_MODEL = 'fish-audio/s2.1-pro-free:free'
+// Verified live: Adam is a real voice on the connected ElevenLabs account, and
+// ElevenLabs routing is independent of the OpenRouter account entirely.
 const FALLBACK_ELEVENLABS_VOICE = 'pNInz6obpgDQGcFmaJgB'
 
 // Free OpenRouter-hosted TTS voices — routed to OpenRouter, not NVIDIA.
@@ -88,7 +90,7 @@ async function callOpenRouterTts(
     response_format: 'mp3',
   }
   if (model.startsWith('deepgram/')) {
-    payload.voice = voice && voice !== 'default' ? voice : FALLBACK_OPENROUTER_VOICE
+    payload.voice = voice && voice !== 'default' ? voice : 'flux-haley-en'
   } else if (voice && voice !== 'default') {
     payload.voice = voice
   }
@@ -155,7 +157,8 @@ export async function POST(request: Request) {
     })
   }
 
-  // Guaranteed working fallbacks, tried in order.
+  // Guaranteed working fallbacks, tried in order. ElevenLabs last because its
+  // routing cannot be affected by OpenRouter account changes.
   if (requestedModel !== FALLBACK_OPENROUTER_MODEL) {
     attempts.push({
       label: FALLBACK_OPENROUTER_MODEL,
@@ -170,9 +173,9 @@ export async function POST(request: Request) {
       })
     }
   }
-  if (!elevenVoiceId && requestedModel !== FALLBACK_OPENROUTER_MODEL) {
+  if (!elevenVoiceId) {
     attempts.push({
-      label: FALLBACK_OPENROUTER_MODEL,
+      label: `${FALLBACK_OPENROUTER_MODEL}:retry`,
       run: () => callOpenRouterTts(FALLBACK_OPENROUTER_MODEL, text, requestedVoice, siteUrl, appName),
     })
   }
