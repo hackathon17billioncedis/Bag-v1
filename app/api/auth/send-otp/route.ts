@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
-import { generateOTP, hashOTP, storeOTP } from '@/lib/auth'
+import { generateOTP, hashOTP, storeOTP, checkOtpRateLimit, checkOtpResendCooldown } from '@/lib/auth'
 
 type SendOTPRequest = {
   email?: string
@@ -11,10 +11,10 @@ function getSmtpConfig() {
   const port = Number(process.env.SMTP_PORT ?? 587)
   const user = process.env.SMTP_USER?.trim()
   const pass = process.env.SMTP_PASSWORD?.trim()
-  const from = process.env.SMTP_FROM?.trim() || user
+  const from = process.env.SMTP_FROM?.trim() || user || process.env.EMAIL_FROM?.trim()
 
   if (!host || !user || !pass || !from) {
-    throw new Error('SMTP_HOST, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM are required.')
+    throw new Error('SMTP_HOST, SMTP_USER, SMTP_PASSWORD, and SMTP_FROM (or EMAIL_FROM) are required.')
   }
 
   return {
@@ -47,6 +47,33 @@ export async function POST(request: Request) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (!emailRegex.test(email)) {
     return NextResponse.json({ error: 'Invalid email format.' }, { status: 400 })
+  }
+
+  // Rate limit per email + IP
+  const forwardedFor = request.headers.get('x-forwarded-for')
+  const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : null
+
+  const rateLimit = await checkOtpRateLimit(email, ip)
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: 'Too many OTP requests. Please try again later.',
+        retryAfterSeconds: rateLimit.resetAt ? Math.ceil((rateLimit.resetAt.getTime() - Date.now()) / 1000) : 60,
+      },
+      { status: 429 },
+    )
+  }
+
+  // Resend cooldown
+  const cooldown = await checkOtpResendCooldown(email)
+  if (!cooldown.allowed) {
+    return NextResponse.json(
+      {
+        error: 'Please wait before requesting another code.',
+        retryAfterSeconds: cooldown.retryAfterSeconds,
+      },
+      { status: 429 },
+    )
   }
 
   try {
@@ -84,9 +111,12 @@ export async function POST(request: Request) {
       `,
     })
 
-    storeOTP(email, hashedOtp)
+    await storeOTP(email, hashedOtp)
 
-    return NextResponse.json({ message: 'OTP sent successfully.' })
+    return NextResponse.json({
+      message: 'OTP sent successfully.',
+      remaining: rateLimit.remaining,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to send OTP.'
     const isAuthError =

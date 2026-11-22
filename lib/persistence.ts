@@ -631,3 +631,458 @@ export async function getAdminOverview(): Promise<AdminOverview> {
     }
   }
 }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Schema bootstrapping (idempotent)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+let _cachedSql: QueryFn | null = null
+
+async function _getSql(): Promise<QueryFn | null> {
+  if (_cachedSql) return _cachedSql
+  const url = process.env.DATABASE_URL
+  if (!url) return null
+  try {
+    _cachedSql = neon(url) as unknown as QueryFn
+    return _cachedSql
+  } catch {
+    return null
+  }
+}
+
+export async function ensureExtendedTables(): Promise<boolean> {
+  const sql = await _getSql()
+  if (!sql) return false
+
+  try {
+    await sql`
+      ALTER TABLE bag_threads ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ
+    `
+    await sql`
+      ALTER TABLE bag_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false
+    `
+    await sql`
+      CREATE TABLE IF NOT EXISTS bag_feedback (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        thread_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        message_index INTEGER NOT NULL,
+        rating SMALLINT NOT NULL CHECK (rating IN (-1, 1)),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `
+    await sql`
+      CREATE TABLE IF NOT EXISTS bag_user_settings (
+        user_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (user_id, key)
+      )
+    `
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_bag_feedback_thread ON bag_feedback(thread_id)
+    `
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_bag_feedback_user ON bag_feedback(user_id)
+    `
+    return true
+  } catch {
+    return false
+  }
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Feedback
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+export type FeedbackEntry = {
+  id: string
+  threadId: string
+  userId: string
+  messageIndex: number
+  rating: 1 | -1
+  createdAt: string
+}
+
+export async function createFeedback(
+  userId: string,
+  threadId: string,
+  messageIndex: number,
+  rating: 1 | -1,
+): Promise<{ ok: boolean; error?: string }> {
+  await ensureExtendedTables()
+  const sql = await _getSql()
+  if (!sql) {
+    return { ok: false, error: 'Storage unavailable.' }
+  }
+
+  try {
+    await sql`
+      INSERT INTO bag_feedback (thread_id, user_id, message_index, rating)
+      VALUES (${threadId}, ${userId}, ${messageIndex}, ${rating})
+    `
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Failed to save feedback.' }
+  }
+}
+
+export async function getFeedback(
+  userId: string,
+  threadId?: string,
+): Promise<{ entries: FeedbackEntry[]; error?: string }> {
+  await ensureExtendedTables()
+  const sql = await _getSql()
+  if (!sql) {
+    return { entries: [], error: 'Storage unavailable.' }
+  }
+
+  try {
+    let entries
+    if (threadId) {
+      const rows = await sql<FeedbackEntryRow[]>`
+        SELECT id, thread_id AS threadId, user_id AS userId, message_index AS messageIndex, rating, created_at AS createdAt
+        FROM bag_feedback
+        WHERE user_id = ${userId} AND thread_id = ${threadId}
+        ORDER BY created_at DESC
+      `
+      entries = rows.map((r) => ({
+        id: r.id,
+        threadId: r.threadId,
+        userId: r.userId,
+        messageIndex: r.messageIndex,
+        rating: r.rating as 1 | -1,
+        createdAt: r.createdAt.toISOString(),
+      }))
+    } else {
+      const rows = await sql<FeedbackEntryRow[]>`
+        SELECT id, thread_id AS threadId, user_id AS userId, message_index AS messageIndex, rating, created_at AS createdAt
+        FROM bag_feedback
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+      `
+      entries = rows.map((r) => ({
+        id: r.id,
+        threadId: r.threadId,
+        userId: r.userId,
+        messageIndex: r.messageIndex,
+        rating: r.rating as 1 | -1,
+        createdAt: r.createdAt.toISOString(),
+      }))
+    }
+    return { entries }
+  } catch {
+    return { entries: [], error: 'Failed to load feedback.' }
+  }
+}
+
+type FeedbackEntryRow = {
+  id: string
+  threadId: string
+  userId: string
+  messageIndex: number
+  rating: 1 | -1
+  createdAt: Date
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   User settings (key/value store)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+export type UserSettings = Record<string, string>
+
+export async function getUserSettings(userId: string): Promise<{
+  settings: UserSettings
+  error?: string
+}> {
+  await ensureExtendedTables()
+  const sql = await _getSql()
+  if (!sql) {
+    return { settings: {}, error: 'Storage unavailable.' }
+  }
+
+  try {
+    const rows = await sql<{ key: string; value: string }[]>`
+      SELECT key, value
+      FROM bag_user_settings
+      WHERE user_id = ${userId}
+    `
+    const settings: UserSettings = {}
+    for (const row of rows) {
+      settings[row.key] = row.value
+    }
+    return { settings }
+  } catch {
+    return { settings: {}, error: 'Failed to load settings.' }
+  }
+}
+
+export async function updateUserSetting(
+  userId: string,
+  key: string,
+  value: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await ensureExtendedTables()
+  const sql = await _getSql()
+  if (!sql) {
+    return { ok: false, error: 'Storage unavailable.' }
+  }
+
+  try {
+    await sql`
+      INSERT INTO bag_user_settings (user_id, key, value, updated_at)
+      VALUES (${userId}, ${key}, ${value}, now())
+      ON CONFLICT (user_id, key)
+      DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+    `
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Failed to save setting.' }
+  }
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Thread rename / duplicate / soft-delete
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+export async function renameThread(
+  userId: string,
+  threadId: string,
+  newTitle: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await ensureExtendedTables()
+  const sql = await _getSql()
+  if (!sql) {
+    return { ok: false, error: 'Storage unavailable.' }
+  }
+
+  try {
+    const title = normalizeTitle(newTitle)
+    await sql`
+      UPDATE bag_threads
+      SET title = ${title}, updated_at = now()
+      WHERE id = ${threadId} AND user_id = ${userId} AND deleted_at IS NULL
+    `
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Failed to rename thread.' }
+  }
+}
+
+export async function duplicateThread(
+  userId: string,
+  threadId: string,
+): Promise<{ ok: boolean; threadId?: string; error?: string }> {
+  await ensureExtendedTables()
+  const sql = await _getSql()
+  if (!sql) {
+    return { ok: false, error: 'Storage unavailable.' }
+  }
+
+  try {
+    const source = await sql<ThreadRow[]>`
+      SELECT id, user_id, title, created_at, updated_at, message_count,
+             last_message_at, last_message_preview, last_model
+      FROM bag_threads
+      WHERE id = ${threadId} AND user_id = ${userId} AND deleted_at IS NULL
+    `
+    if (!source[0]) {
+      return { ok: false, error: 'Thread not found.' }
+    }
+
+    const newChatId = crypto.randomUUID()
+    const newTitle = `Copy of ${source[0].title}`
+    const now = new Date()
+
+    await sql`
+      INSERT INTO bag_threads (
+        id, user_id, title, created_at, updated_at,
+        message_count, last_message_at, last_message_preview, last_model
+      )
+      VALUES (
+        ${newChatId}, ${userId}, ${newTitle}, ${now}, ${now},
+        0, NULL, NULL, ${source[0].last_model ?? DEFAULT_MODEL}
+      )
+    `
+    await ensureUser(sql, userId)
+    await setActiveThread(sql, userId, newChatId)
+
+    const messages = await sql<Array<{
+      role: string; content: string; model: string; message_time: Date; user_email: string | null
+    }>>`
+      SELECT role, content, model, message_time, user_email
+      FROM bag_messages
+      WHERE thread_id = ${threadId} AND user_id = ${userId}
+      ORDER BY id ASC
+    `
+
+    for (const m of messages) {
+      await sql`
+        INSERT INTO bag_messages (
+          thread_id, user_id, role, content, model, message_time, user_email
+        )
+        VALUES (
+          ${newChatId}, ${userId}, ${m.role}, ${m.content}, ${m.model},
+          ${m.message_time.toISOString()}::timestamptz, ${m.user_email ?? null}
+        )
+      `
+    }
+
+    await sql`
+      UPDATE bag_threads
+      SET message_count = ${messages.length},
+          updated_at = ${now.toISOString()}::timestamptz
+      WHERE id = ${newChatId}
+    `
+
+    return { ok: true, threadId: newChatId }
+  } catch {
+    return { ok: false, error: 'Failed to duplicate thread.' }
+  }
+}
+
+export async function deleteThread(
+  userId: string,
+  threadId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await ensureExtendedTables()
+  const sql = await _getSql()
+  if (!sql) {
+    return { ok: false, error: 'Storage unavailable.' }
+  }
+
+  try {
+    await sql`
+      UPDATE bag_threads
+      SET deleted_at = now(), updated_at = now()
+      WHERE id = ${threadId} AND user_id = ${userId}
+    `
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Failed to delete thread.' }
+  }
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Memory edit / delete
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+export async function updateMemoryItem(
+  userId: string,
+  memoryId: string,
+  newText: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await ensureExtendedTables()
+  const sql = await _getSql()
+  if (!sql) {
+    return { ok: false, error: 'Storage unavailable.' }
+  }
+
+  try {
+    const rows = await sql<{ items: unknown }[]>`
+      SELECT items
+      FROM bag_memory
+      WHERE user_id = ${userId}
+    `
+    const raw = rows[0]?.items
+    const existing = Array.isArray(raw) ? (raw as unknown[]) : []
+
+    const found = existing.some(
+      (entry) => entry && typeof entry === 'object' && (entry as Partial<MemoryItem>).id === memoryId,
+    )
+    if (!found) {
+      return { ok: false, error: 'Memory item not found.' }
+    }
+
+    const next = existing.map((entry) => {
+      if (entry && typeof entry === 'object' && (entry as Partial<MemoryItem>).id === memoryId) {
+        return { ...(entry as Record<string, unknown>), text: newText }
+      }
+      return entry
+    })
+
+    await sql`
+      UPDATE bag_memory
+      SET items = ${JSON.stringify(next)}::jsonb, updated_at = now()
+      WHERE user_id = ${userId}
+    `
+
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Failed to update memory item.' }
+  }
+}
+
+export async function deleteMemoryItem(
+  userId: string,
+  memoryId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await ensureExtendedTables()
+  const sql = await _getSql()
+  if (!sql) {
+    return { ok: false, error: 'Storage unavailable.' }
+  }
+
+  try {
+    const rows = await sql<{ items: unknown }[]>`
+      SELECT items
+      FROM bag_memory
+      WHERE user_id = ${userId}
+    `
+    const raw = rows[0]?.items
+    const existing = Array.isArray(raw) ? (raw as unknown[]) : []
+
+    const found = existing.some(
+      (entry) => entry && typeof entry === 'object' && (entry as Partial<MemoryItem>).id === memoryId,
+    )
+    if (!found) {
+      return { ok: false, error: 'Memory item not found.' }
+    }
+
+    const next = existing.filter(
+      (entry) =>
+        !(entry && typeof entry === 'object' && (entry as Partial<MemoryItem>).id === memoryId),
+    )
+
+    await sql`
+      UPDATE bag_memory
+      SET items = ${JSON.stringify(next)}::jsonb, updated_at = now()
+      WHERE user_id = ${userId}
+    `
+
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Failed to delete memory item.' }
+  }
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Export helpers
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+export type ExportMessage = {
+  role: 'user' | 'assistant'
+  content: string
+  model?: string
+  timestamp?: string
+}
+
+export async function getExportHistory(
+  userId: string,
+  chatId: string,
+): Promise<{ messages: ExportMessage[]; error?: string }> {
+  const result = await getConversationHistory(userId, chatId)
+  if (!result.storageAvailable) {
+    return { messages: [], error: 'Storage unavailable.' }
+  }
+
+  const messages: ExportMessage[] = result.entries.map((entry) => ({
+    role: entry.role as 'user' | 'assistant',
+    content: entry.content,
+    model: entry.model,
+    timestamp: entry.timestamp,
+  }))
+
+  return { messages }
+}

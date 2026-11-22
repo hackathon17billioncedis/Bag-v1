@@ -7,18 +7,22 @@ import {
   ChevronDown,
   Copy,
   Download,
+  Edit3,
   LoaderCircle,
   Lock,
   Mic,
   MicOff,
+  MoreHorizontal,
   Paperclip,
   PhoneOff,
   Plus,
   Menu,
   RefreshCcw,
   Search,
+  Settings,
   ThumbsDown,
   ThumbsUp,
+  Trash2,
   Volume2,
   X,
 } from 'lucide-react'
@@ -26,7 +30,21 @@ import Image from 'next/image'
 import { EmailOTPAuth } from '@/components/email-otp-auth'
 import { apiUrl } from '@/lib/client-config'
 import type { SessionUser } from '@/lib/auth'
-import { APP_NAME, DEFAULT_MODEL, DEFAULT_TTS_MODEL, getModelOption, getModelOptions, TTS_MODEL_OPTIONS, type ModelOption } from '@/lib/models'
+import {
+  APP_NAME,
+  DEFAULT_MODEL,
+  DEFAULT_TTS_MODEL,
+  getModelOption,
+  getModelOptions,
+  TTS_MODEL_OPTIONS,
+  type ModelOption,
+} from '@/lib/models'
+import {
+  createFeedback,
+  renameThread,
+  duplicateThread,
+  deleteThread,
+} from '@/lib/persistence'
 
 type ChatMessage = {
   role: 'user' | 'assistant'
@@ -161,6 +179,22 @@ export default function HomePage() {
   const [attachments, setAttachments] = useState<UploadedFile[]>([])
   const [canvasText, setCanvasText] = useState('')
   const [authMode, setAuthMode] = useState<'sign-in' | 'sign-up'>('sign-in')
+
+  // Settings (persisted to Neon)
+  const [settings, setSettings] = useState<Record<string, string>>({})
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+
+  // Thread context menu (rename / duplicate / delete)
+  const [threadMenuOpen, setThreadMenuOpen] = useState(false)
+  const [threadMenuThreadId, setThreadMenuThreadId] = useState('')
+  const [threadMenuX, setThreadMenuX] = useState(0)
+  const [threadMenuY, setThreadMenuY] = useState(0)
+
+  // Feedback state: message indexes that already have feedback
+  const [feedbackSent, setFeedbackSent] = useState<Set<number>>(new Set())
+
+  // Export
+  const [isExporting, setIsExporting] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const lastMessageCountRef = useRef(0)
@@ -452,6 +486,7 @@ export default function HomePage() {
 
               setMessages(entries)
               setCanvasText(entries.filter((entry) => entry.role === 'assistant').at(-1)?.content ?? '')
+              await loadSettings()
             }
           }
         }
@@ -1239,6 +1274,178 @@ async function transcribeInBrowser(blob: Blob): Promise<string | null> {
     saveBlob(blob, `${baseName}.docx`)
   }
 
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     Settings
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+  const loadSettings = async () => {
+    if (!sessionUser?.id) return
+    try {
+      const response = await fetch(apiUrl('/api/settings'))
+      if (response.ok) {
+        const payload = (await response.json()) as { settings: Record<string, string> }
+        setSettings(payload.settings ?? {})
+        // Hydrate local UI state from persisted settings
+        if (payload.settings?.ttsModel) setTtsModel(payload.settings.ttsModel)
+        if (payload.settings?.webSearchDefault !== undefined) {
+          setWebSearchEnabled(payload.settings.webSearchDefault === 'true')
+        }
+        if (payload.settings?.defaultModel) {
+          setModel(payload.settings.defaultModel)
+        }
+      }
+    } catch {
+      // Ignore settings load errors
+    }
+  }
+
+  const saveSetting = async (key: string, value: string) => {
+    if (!sessionUser?.id) return
+    try {
+      const response = await fetch(apiUrl('/api/settings'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: { [key]: value } }),
+      })
+      if (response.ok) {
+        setSettings((prev) => ({ ...prev, [key]: value }))
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     Feedback
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+  const sendFeedback = async (messageIndex: number, rating: 1 | -1) => {
+    if (!sessionUser?.id || !chatId || feedbackSent.has(messageIndex)) return
+
+    const result = await createFeedback(sessionUser.id, chatId, messageIndex, rating)
+    if (result.ok) {
+      setFeedbackSent((prev) => new Set(prev).add(messageIndex))
+    }
+  }
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     Thread menu: rename / duplicate / delete
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+  const openThreadMenu = (threadId: string, x: number, y: number) => {
+    setThreadMenuThreadId(threadId)
+    setThreadMenuX(x)
+    setThreadMenuY(y)
+    setThreadMenuOpen(true)
+  }
+
+  const closeThreadMenu = () => setThreadMenuOpen(false)
+
+  const handleRenameThread = async (newTitle: string) => {
+    if (!threadMenuThreadId) return
+    const result = await renameThread(sessionUser!.id, threadMenuThreadId, newTitle)
+    if (result.ok) {
+      void syncWorkspace()
+      closeThreadMenu()
+    } else {
+      setError(result.error || 'Failed to rename chat.')
+    }
+  }
+
+  const handleDuplicateThread = async () => {
+    if (!threadMenuThreadId) return
+    const result = await duplicateThread(sessionUser!.id, threadMenuThreadId)
+    if (result.ok && result.threadId) {
+      closeThreadMenu()
+      await syncWorkspace(result.threadId)
+      await loadConversation(result.threadId)
+    } else {
+      setError(result.error || 'Failed to duplicate chat.')
+    }
+  }
+
+  const handleDeleteThread = async () => {
+    if (!threadMenuThreadId) return
+    const result = await deleteThread(sessionUser!.id, threadMenuThreadId)
+    if (result.ok) {
+      closeThreadMenu()
+      void syncWorkspace()
+      // If the deleted thread was active, start a new one
+      if (threadMenuThreadId === chatId) {
+        await startNewConversation()
+      }
+    } else {
+      setError(result.error || 'Failed to delete chat.')
+    }
+  }
+
+  /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     Export
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+  const exportThread = async (format: 'json' | 'markdown' | 'pdf') => {
+    if (!sessionUser?.id || !chatId) return
+    setIsExporting(true)
+    try {
+      const response = await fetch(apiUrl(`/api/export/${chatId}?format=${format}`))
+      if (!response.ok) throw new Error('Export failed')
+
+      if (format === 'pdf') {
+        // PDF is generated client-side from messages
+        const payload = await response.json()
+        const { messages } = payload as { messages: Array<{ role: string; content: string; model?: string; timestamp?: string }> }
+        const { jsPDF } = await import('jspdf')
+        const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
+        const margin = 42
+        const width = pdf.internal.pageSize.getWidth() - margin * 2
+        pdf.setFont('times', 'normal')
+        pdf.setFontSize(12)
+        let cursorY = margin
+
+        pdf.text(`Bag-v1 Conversation Export`, margin, cursorY)
+        cursorY += 24
+        pdf.text(`Chat ID: ${chatId}`, margin, cursorY)
+        cursorY += 16
+        pdf.text(`Exported: ${new Date().toISOString()}`, margin, cursorY)
+        cursorY += 24
+
+        for (const msg of messages) {
+          if (cursorY > pdf.internal.pageSize.getHeight() - margin) {
+            pdf.addPage()
+            cursorY = margin
+          }
+          const roleLabel = msg.role === 'user' ? 'You' : 'Bag-v1'
+          pdf.text(`${roleLabel} ${msg.model ? `(model: ${msg.model})` : ''}`, margin, cursorY)
+          cursorY += 14
+          const lines = pdf.splitTextToSize(msg.content, width)
+          for (const line of lines as string[]) {
+            if (cursorY > pdf.internal.pageSize.getHeight() - margin) {
+              pdf.addPage()
+              cursorY = margin
+            }
+            pdf.text(line, margin, cursorY)
+            cursorY += 16
+          }
+          cursorY += 14
+        }
+
+        pdf.save(`bag-v1-export-${chatId}.pdf`)
+      } else {
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `bag-v1-export-${chatId}.${format === 'json' ? 'json' : 'md'}`
+        anchor.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : 'Export failed.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const voicePhase = isRecordingVoice
     ? 'is-listening'
     : isThinking || isSending
@@ -1304,16 +1511,26 @@ async function transcribeInBrowser(blob: Blob): Promise<string | null> {
 
           <div className="toolbar-left">
             {sessionUser ? (
-              <button
-                className="button button-ghost"
-                type="button"
-                onClick={async () => {
-                  await fetch(apiUrl('/api/auth/logout'), { method: 'POST' })
-                  window.location.reload()
-                }}
-              >
-                <RefreshCcw size={16} /> Sign out
-              </button>
+              <>
+                <button
+                  className="button button-ghost"
+                  type="button"
+                  onClick={async () => {
+                    await fetch(apiUrl('/api/auth/logout'), { method: 'POST' })
+                    window.location.reload()
+                  }}
+                >
+                  <RefreshCcw size={16} /> Sign out
+                </button>
+                <button
+                  className="button button-ghost"
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  aria-label="Open settings"
+                >
+                  <Settings size={16} /> Settings
+                </button>
+              </>
             ) : (
               <>
                 <button
@@ -1371,15 +1588,32 @@ async function transcribeInBrowser(blob: Blob): Promise<string | null> {
                       threads.map((thread) => {
                         const active = thread.id === chatId
                         return (
-                          <button
+                          <div
                             key={thread.id}
-                            type="button"
-                            className={`sidebar-item ${active ? 'active' : ''}`}
-                            onClick={() => void loadConversation(thread.id)}
+                            className="sidebar-item-wrapper"
+                            onMouseEnter={() => {}}
+                            onMouseLeave={() => {}}
                           >
-                            <strong>{thread.title}</strong>
-                            <small>{thread.lastMessagePreview || 'No preview available.'}</small>
-                          </button>
+                            <button
+                              type="button"
+                              className={`sidebar-item ${active ? 'active' : ''}`}
+                              onClick={() => void loadConversation(thread.id)}
+                            >
+                              <strong>{thread.title}</strong>
+                              <small>{thread.lastMessagePreview || 'No preview available.'}</small>
+                            </button>
+                            <button
+                              type="button"
+                              className="thread-menu-button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openThreadMenu(thread.id, event.clientX, event.clientY)
+                              }}
+                              aria-label="Thread options"
+                            >
+                              <MoreHorizontal size={14} />
+                            </button>
+                          </div>
                         )
                       })
                     )}
@@ -1516,7 +1750,7 @@ async function transcribeInBrowser(blob: Blob): Promise<string | null> {
               </div>
             ) : null}
 
-            {messages.map((message) => {
+            {messages.map((message, index) => {
               const isAssistant = message.role === 'assistant'
               const displayContent = isAssistant
                 ? formatAssistantDisplayText(message.content)
@@ -1537,10 +1771,22 @@ async function transcribeInBrowser(blob: Blob): Promise<string | null> {
                     </button>
                     {isAssistant ? (
                       <>
-                        <button type="button" className="message-action" aria-label="Helpful reply">
+                        <button
+                          type="button"
+                          className={`message-action${feedbackSent.has(index) ? ' feedback-sent' : ''}`}
+                          onClick={() => sendFeedback(index, 1)}
+                          aria-label={feedbackSent.has(index) ? 'Feedback sent — helpful' : 'Helpful reply'}
+                          disabled={feedbackSent.has(index)}
+                        >
                           <ThumbsUp size={14} />
                         </button>
-                        <button type="button" className="message-action" aria-label="Unhelpful reply">
+                        <button
+                          type="button"
+                          className={`message-action${feedbackSent.has(index) ? ' feedback-sent' : ''}`}
+                          onClick={() => sendFeedback(index, -1)}
+                          aria-label={feedbackSent.has(index) ? 'Feedback sent — unhelpful' : 'Unhelpful reply'}
+                          disabled={feedbackSent.has(index)}
+                        >
                           <ThumbsDown size={14} />
                         </button>
                       </>
@@ -1837,6 +2083,171 @@ async function transcribeInBrowser(blob: Blob): Promise<string | null> {
           </div>
         </div>
       ) : null}
+
+      {threadMenuOpen && (
+        <div
+          className="thread-menu"
+          style={{ top: threadMenuY, left: threadMenuX }}
+          onClick={closeThreadMenu}
+        >
+          <button
+            className="thread-menu-item"
+            onClick={(event) => {
+              event.stopPropagation()
+              const title = window.prompt('Rename chat:')
+              if (title !== null && title.trim()) {
+                void handleRenameThread(title.trim())
+              }
+            }}
+          >
+            <Edit3 size={14} /> Rename
+          </button>
+          <button
+            className="thread-menu-item"
+            onClick={(event) => {
+              event.stopPropagation()
+              void handleDuplicateThread()
+              closeThreadMenu()
+            }}
+          >
+            <Copy size={14} /> Duplicate
+          </button>
+          <button
+            className="thread-menu-item danger"
+            onClick={(event) => {
+              event.stopPropagation()
+              if (window.confirm('Delete this chat? This cannot be undone.')) {
+                void handleDeleteThread()
+              }
+              closeThreadMenu()
+            }}
+          >
+            <Trash2 size={14} /> Delete
+          </button>
+        </div>
+      )}
+
+      {isSettingsOpen && (
+        <div className="settings-dialog" onClick={() => setIsSettingsOpen(false)}>
+          <div className="settings-dialog-content" onClick={(event) => event.stopPropagation()}>
+            <div className="settings-dialog-header">
+              <h2>Settings</h2>
+              <button
+                className="settings-dialog-close"
+                onClick={() => setIsSettingsOpen(false)}
+                aria-label="Close settings"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="settings-section">
+              <div className="settings-section-title">Display</div>
+              <div className="settings-row">
+                <span className="settings-label">Theme</span>
+                <select
+                  className="settings-select"
+                  value={settings.theme ?? 'dark'}
+                  onChange={(event) => {
+                    void saveSetting('theme', event.target.value)
+                  }}
+                >
+                  <option value="dark">Dark</option>
+                  <option value="system">System</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="settings-section">
+              <div className="settings-section-title">Defaults</div>
+              <div className="settings-row">
+                <span className="settings-label">Default model</span>
+                <select
+                  className="settings-select"
+                  value={settings.defaultModel ?? DEFAULT_MODEL}
+                  onChange={(event) => {
+                    void saveSetting('defaultModel', event.target.value)
+                    setModel(event.target.value)
+                  }}
+                >
+                  {modelOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="settings-row">
+                <span className="settings-label">Web search by default</span>
+                <div
+                  className={`settings-toggle${settings.webSearchDefault === 'true' ? ' active' : ''}`}
+                  onClick={() => {
+                    const next = settings.webSearchDefault !== 'true'
+                    void saveSetting('webSearchDefault', next ? 'true' : 'false')
+                    setWebSearchEnabled(next)
+                  }}
+                  role="switch"
+                  aria-checked={settings.webSearchDefault === 'true'}
+                >
+                  <div className="settings-toggle-thumb" />
+                </div>
+              </div>
+            </div>
+
+            <div className="settings-section">
+              <div className="settings-section-title">Voice</div>
+              <div className="settings-row">
+                <span className="settings-label">TTS model</span>
+                <select
+                  className="settings-select"
+                  value={settings.ttsModel ?? ttsModel}
+                  onChange={(event) => {
+                    void saveSetting('ttsModel', event.target.value)
+                    setTtsModel(event.target.value)
+                  }}
+                >
+                  {TTS_MODEL_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="settings-section">
+              <div className="settings-section-title">Export conversation</div>
+              {isExporting ? (
+                <span className="helper">Preparing export…</span>
+              ) : (
+                <>
+                  <button
+                    className="export-button"
+                    onClick={() => void exportThread('json')}
+                    disabled={!chatId}
+                  >
+                    <Download size={14} /> JSON
+                  </button>
+                  <button
+                    className="export-button"
+                    onClick={() => void exportThread('markdown')}
+                    disabled={!chatId}
+                  >
+                    <Download size={14} /> Markdown
+                  </button>
+                  <button
+                    className="export-button"
+                    onClick={() => void exportThread('pdf')}
+                    disabled={!chatId}
+                  >
+                    <Download size={14} /> PDF
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
